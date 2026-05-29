@@ -1,0 +1,56 @@
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+*.local
+www.youtube.com_cookies.txt
+*cookies*.txt
+
+# Local scripts and ad hoc pages
+run.bash
+homepage.html
+
+# Development notes
+dev-docs/
+
+# Runtime outputs
+output/
+outputs/
+artifacts/
+tmp/
+temp/
+
+# Python cache and tooling
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.pyre/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Build and packaging
+dist/
+build/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# Editors and OS files
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
