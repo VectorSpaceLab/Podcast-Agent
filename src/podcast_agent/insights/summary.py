@@ -21,12 +21,13 @@ def generate_summary(
 ) -> dict[str, Any]:
     input_payload = _load_mapping(output_dir / "input.json", "input.json")
     question = str(input_payload.get("question") or "").strip()
+    language = report_intent.report_language if report_intent else "zh-Hans"
     source = _load_optional_mapping(output_dir / "source.json")
     metadata = _load_optional_mapping(output_dir / "elements" / "metadata.json")
     viewpoints_payload = _load_mapping(output_dir / "insights" / "viewpoints.json", "insights/viewpoints.json")
     summary_viewpoints = build_summary_viewpoints_payload(viewpoints_payload)
     if not summary_viewpoints["viewpoints"]:
-        summary = empty_summary(report_intent.report_language if report_intent else "zh-Hans")
+        summary = empty_summary(language)
         save_json(output_dir / "insights" / "summary.json", summary)
         return summary
 
@@ -34,12 +35,15 @@ def generate_summary(
         question=question,
         viewpoints=summary_viewpoints,
         chapters=metadata.get("chapters") if isinstance(metadata.get("chapters"), list) else [],
+        video_title=str(metadata.get("title") or ""),
         source_url=_source_url(source, metadata),
         report_intent=report_intent,
     )
     summary = parse_model_json(model_writer(prompt).strip())
     if not summary:
-        summary = empty_summary(report_intent.report_language if report_intent else "zh-Hans")
+        summary = empty_summary(language)
+    else:
+        _ensure_report_title(summary, language)
     save_json(output_dir / "insights" / "summary.json", summary)
     return summary
 
@@ -99,11 +103,21 @@ def empty_summary(language: object) -> dict[str, Any]:
     return {
         "report_type": "summary",
         "language": language,
+        "report_title": _fallback_report_title(language),
         "introduction": "",
         "core_conclusions": [],
         "viewpoint_order": [],
         "one_paragraph_takeaway": "",
     }
+
+
+def _ensure_report_title(summary: dict[str, Any], language: object) -> None:
+    title = str(summary.get("report_title") or "").strip() or _fallback_report_title(language)
+    summary["report_title"] = title
+
+
+def _fallback_report_title(language: object) -> str:
+    return "Video Report" if str(language).startswith("en") else "视频报告"
 
 
 def _sanitize_importance_score(value: Any) -> int | None:

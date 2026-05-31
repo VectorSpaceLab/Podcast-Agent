@@ -8,7 +8,10 @@ from podcast_agent.pipeline.artifacts import load_json, save_json
 def _write_summary_inputs(output_dir: Path) -> None:
     save_json(output_dir / "input.json", {"url": "https://www.youtube.com/watch?v=xxxx", "question": "这个视频讲了什么？"})
     save_json(output_dir / "source.json", {"source_type": "youtube", "url": "https://www.youtube.com/watch?v=xxxx", "source_id": "xxxx"})
-    save_json(output_dir / "elements" / "metadata.json", {"chapters": [{"start": 0.0, "title": "Opening"}]})
+    save_json(
+        output_dir / "elements" / "metadata.json",
+        {"title": "How Agents Change Research", "chapters": [{"start": 0.0, "title": "Opening"}]},
+    )
     save_json(
         output_dir / "insights" / "viewpoints.json",
         {
@@ -69,12 +72,16 @@ def test_build_report_summary_prompt_uses_videochat_shape() -> None:
     prompt = build_report_summary_v1_prompt(
         question="q",
         viewpoints={"viewpoints": [{"id": "V1", "title": "观点", "sub_theses": [{"title": "子论点"}]}]},
+        video_title="How Agents Change Research",
         source_url="https://www.youtube.com/watch?v=xxxx",
         chapters=[{"start": 0.0, "title": "Opening"}],
     )
 
     assert "You are a senior feature editor synthesizing an evidence-based report from completed viewpoint details." in prompt
     assert "Return the summary JSON now:" in prompt
+    assert '"report_title"' in prompt
+    assert "Video Title:\nHow Agents Change Research" in prompt
+    assert "The report_title must be a translation or localization of the original video title into the target report language." in prompt
     assert '"core_conclusions"' in prompt
     assert '"target_core_conclusions": "3-5"' in prompt
 
@@ -84,11 +91,13 @@ def test_generate_summary_writes_summary(tmp_path: Path) -> None:
 
     def fake_model_writer(prompt: str) -> str:
         assert "Condensed Viewpoints" in prompt
+        assert "Video Title:\nHow Agents Change Research" in prompt
         assert "source_text" not in prompt
         return """
         {
           "report_type": "summary",
           "language": "zh-Hans",
+          "report_title": "关键判断",
           "introduction": "导语。",
           "core_conclusions": [
             {
@@ -107,6 +116,7 @@ def test_generate_summary_writes_summary(tmp_path: Path) -> None:
     summary = generate_summary(output_dir=tmp_path, model_writer=fake_model_writer)
 
     assert summary == load_json(tmp_path / "insights" / "summary.json")
+    assert summary["report_title"] == "关键判断"
     assert summary["core_conclusions"][0]["id"] == "C1"
     assert summary["viewpoint_order"] == ["V1", "V2"]
 
@@ -119,3 +129,24 @@ def test_generate_summary_writes_empty_summary_without_details(tmp_path: Path) -
 
     assert summary == empty_summary("zh-Hans")
     assert load_json(tmp_path / "insights" / "summary.json") == empty_summary("zh-Hans")
+
+
+def test_generate_summary_keeps_full_report_title(tmp_path: Path) -> None:
+    _write_summary_inputs(tmp_path)
+
+    def fake_model_writer(prompt: str) -> str:
+        return """
+        {
+          "report_type": "summary",
+          "language": "zh-Hans",
+          "report_title": "智能体如何改变科学研究的节奏和组织方式",
+          "introduction": "",
+          "core_conclusions": [],
+          "viewpoint_order": [],
+          "one_paragraph_takeaway": ""
+        }
+        """
+
+    summary = generate_summary(output_dir=tmp_path, model_writer=fake_model_writer)
+
+    assert summary["report_title"] == "智能体如何改变科学研究的节奏和组织方式"

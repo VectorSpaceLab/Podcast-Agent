@@ -35,3 +35,11 @@ class AudioTranscriptionError(ElementFetchError):
 
 class EvidenceExtractionError(PodcastAgentError):
     """Raised when evidence extraction fails."""
+
+
+class ReportRenderError(PodcastAgentError):
+    """Raised when report rendering fails."""
+
+
+class XhsReportError(PodcastAgentError):
+    """Raised when XHS report generation fails."""

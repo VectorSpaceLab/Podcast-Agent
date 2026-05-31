@@ -59,7 +59,7 @@ def render_report_markdown(
     segment_index_map = _build_segment_index_map(evidence)
     locale = _render_locale(report_intent)
     lines: list[str] = []
-    title = str(metadata.get("title") or locale["fallback_title"]).strip()
+    title = str(summary.get("report_title") or locale["fallback_title"]).strip()
     lines.extend([f"# {title}", ""])
     lines.extend(_render_introduction(summary, locale))
     lines.extend(_render_core_conclusions(summary, locale))

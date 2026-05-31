@@ -1,5 +1,6 @@
 from typer.testing import CliRunner
 
+from podcast_agent.cli.commands import FullBatchCase, FullBatchCaseResult
 from podcast_agent.cli.main import app
 from podcast_agent.intent import ReportIntent
 from podcast_agent.types import TranscriptInfo, TranscriptSegment
@@ -29,7 +30,7 @@ def test_cli_run_initializes_pipeline(tmp_path) -> None:
             transcript_downloader=FakeTranscriptDownloader(),
         )
 
-    from podcast_agent.cli import main
+    from podcast_agent.cli import stages as main
 
     original = main.run_pipeline
     main.run_pipeline = fake_run_pipeline
@@ -86,7 +87,7 @@ def test_cli_run_exits_for_unsupported_source(tmp_path) -> None:
 
 
 def test_cli_full_runs_all_stages_and_renders_report(tmp_path) -> None:
-    from podcast_agent.cli import main
+    from podcast_agent.cli import stages as main
 
     output_dir = tmp_path / "full-demo"
     runner = CliRunner()
@@ -141,7 +142,41 @@ def test_cli_full_runs_all_stages_and_renders_report(tmp_path) -> None:
         report_path = output_dir / "reports" / "report.md"
         report_path.parent.mkdir(parents=True, exist_ok=True)
         report_path.write_text("# Demo\n", encoding="utf-8")
+        report_path.with_suffix(".html").write_text("<!doctype html><html></html>\n", encoding="utf-8")
         return report_path
+
+    def fake_render_pdf_report(*, output_dir, html_path=None):
+        calls.append(("pdf", str(output_dir), str(html_path)))
+        pdf_path = output_dir / "reports" / "report.pdf"
+        pdf_path.write_bytes(b"%PDF")
+        return pdf_path
+
+    class ComposeResult:
+        note_path = output_dir / "reports" / "xhs" / "note.md"
+        post_meta_path = output_dir / "reports" / "xhs" / "post_meta.json"
+
+    def fake_compose_xhs_report(*, output_dir, model_writer, angle=None):
+        calls.append(("xhs_compose", str(output_dir), model_writer("xhs"), angle))
+        result = ComposeResult()
+        result.note_path.parent.mkdir(parents=True, exist_ok=True)
+        result.note_path.write_text("note\n", encoding="utf-8")
+        result.post_meta_path.write_text("{}\n", encoding="utf-8")
+        return result
+
+    def fake_prepare_xhs_cover(*, output_dir, xhs_dir):
+        calls.append(("xhs_cover", str(output_dir), str(xhs_dir)))
+
+    class XhsRenderResult:
+        intro_path = output_dir / "reports" / "xhs" / "images" / "intro.png"
+        page_paths = [output_dir / "reports" / "xhs" / "images" / "page_1.png"]
+
+    def fake_render_xhs_images(*, note_path, output_dir, width=1080, height=1440, dpr=2):
+        calls.append(("xhs_render", str(note_path), str(output_dir), width, height, dpr))
+        result = XhsRenderResult()
+        result.intro_path.parent.mkdir(parents=True, exist_ok=True)
+        result.intro_path.write_bytes(b"png")
+        result.page_paths[0].write_bytes(b"png")
+        return result
 
     original_run = main.run_pipeline
     original_extract = main.extract_evidence
@@ -149,6 +184,10 @@ def test_cli_full_runs_all_stages_and_renders_report(tmp_path) -> None:
     original_viewpoints = main.generate_viewpoints
     original_summary = main.generate_summary
     original_report = main.render_markdown_report
+    original_pdf = main.render_pdf_report
+    original_compose = main.compose_xhs_report
+    original_cover = main.prepare_xhs_cover
+    original_render_xhs = main.render_xhs_images
     original_model_writer = main.build_default_model_writer
     original_resolve_intent = main.resolve_report_intent
     original_write_intent = main.write_report_intent
@@ -158,6 +197,10 @@ def test_cli_full_runs_all_stages_and_renders_report(tmp_path) -> None:
     main.generate_viewpoints = fake_generate_viewpoints
     main.generate_summary = fake_generate_summary
     main.render_markdown_report = fake_render_markdown_report
+    main.render_pdf_report = fake_render_pdf_report
+    main.compose_xhs_report = fake_compose_xhs_report
+    main.prepare_xhs_cover = fake_prepare_xhs_cover
+    main.render_xhs_images = fake_render_xhs_images
     main.build_default_model_writer = lambda: (lambda prompt: f"model:{prompt}")
     main.resolve_report_intent = fake_resolve_report_intent
     main.write_report_intent = fake_write_report_intent
@@ -181,6 +224,10 @@ def test_cli_full_runs_all_stages_and_renders_report(tmp_path) -> None:
         main.generate_viewpoints = original_viewpoints
         main.generate_summary = original_summary
         main.render_markdown_report = original_report
+        main.render_pdf_report = original_pdf
+        main.compose_xhs_report = original_compose
+        main.prepare_xhs_cover = original_cover
+        main.render_xhs_images = original_render_xhs
         main.build_default_model_writer = original_model_writer
         main.resolve_report_intent = original_resolve_intent
         main.write_report_intent = original_write_intent
@@ -195,20 +242,32 @@ def test_cli_full_runs_all_stages_and_renders_report(tmp_path) -> None:
         "viewpoints",
         "summary",
         "report",
+        "pdf",
+        "xhs_compose",
+        "xhs_cover",
+        "xhs_render",
     ]
     assert calls[4][2].report_language == "en"
     assert calls[5][2].report_length == "brief"
     assert calls[6][2].report_language == "en"
     assert calls[7][2].report_length == "brief"
-    assert "Stage 1/7: detecting report intent" in result.output
+    assert "Stage 1/11: detecting report intent" in result.output
+    assert "Stage 8/11: rendering PDF report" in result.output
+    assert "Stage 11/11: rendering xhs images" in result.output
     assert "Detected report intent: en brief (model)" in result.output
     assert "Rendered report:" in result.output
     assert "Rendered HTML report:" in result.output
+    assert "Rendered PDF report:" in result.output
+    assert "Generated XHS note:" in result.output
+    assert "Rendered XHS images:" in result.output
     assert (output_dir / "reports" / "report.md").is_file()
+    assert (output_dir / "reports" / "report.html").is_file()
+    assert (output_dir / "reports" / "report.pdf").is_file()
+    assert (output_dir / "reports" / "xhs" / "images" / "intro.png").is_file()
 
 
 def test_cli_intent_writes_intent_json(tmp_path) -> None:
-    from podcast_agent.cli import main
+    from podcast_agent.cli import stages as main
 
     output_dir = tmp_path / "intent-demo"
     runner = CliRunner()
@@ -234,8 +293,168 @@ def test_cli_intent_writes_intent_json(tmp_path) -> None:
     assert (output_dir / "insights" / "intent.json").is_file()
 
 
+def test_cli_full_batch_dry_run_filters_cases(tmp_path) -> None:
+    cases_path = tmp_path / "cases.json"
+    cases_path.write_text(
+        """{
+  "version": 1,
+  "default_question": "默认问题？",
+  "cases": [
+    {"id": "old", "url": "https://www.youtube.com/watch?v=old", "tags": ["legacy"]},
+    {"id": "new", "url": "https://www.youtube.com/watch?v=new", "question": "新问题？", "tags": ["new", "pdf"]}
+  ]
+}
+""",
+        encoding="utf-8",
+    )
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "full-batch",
+            "--cases",
+            str(cases_path),
+            "--tag",
+            "new",
+            "--run-id",
+            "rid",
+            "--output-root",
+            str(tmp_path / "out"),
+            "--dry-run",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Dry run: 1 cases selected." in result.output
+    assert "new\thttps://www.youtube.com/watch?v=new" in result.output
+    assert "old\thttps://www.youtube.com/watch?v=old" not in result.output
+    assert not (tmp_path / "out" / "batch-rid" / "logs" / "summary.json").exists()
+
+
+def test_cli_full_batch_runs_selected_cases_and_writes_summary(tmp_path) -> None:
+    from podcast_agent.cli import batch as main
+
+    cases_path = tmp_path / "cases.json"
+    cases_path.write_text(
+        """{
+  "version": 1,
+  "default_question": "默认问题？",
+  "cases": [
+    {"id": "a", "url": "https://www.youtube.com/watch?v=a", "tags": ["new"]},
+    {"id": "b", "url": "https://www.youtube.com/watch?v=b", "tags": ["legacy"]}
+  ]
+}
+""",
+        encoding="utf-8",
+    )
+    calls = []
+
+    def fake_run_full_batch_case(*, case, output_dir, log_path):
+        calls.append((case.id, case.question, output_dir, log_path))
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        log_path.write_text("ok\n", encoding="utf-8")
+        output_dir.mkdir(parents=True, exist_ok=True)
+        return FullBatchCaseResult(case=case, output_dir=output_dir, log_path=log_path, exit_code=0)
+
+    original = main.run_full_batch_case
+    main.run_full_batch_case = fake_run_full_batch_case
+    try:
+        result = CliRunner().invoke(
+            app,
+            [
+                "full-batch",
+                "--cases",
+                str(cases_path),
+                "--case",
+                "a",
+                "--run-id",
+                "rid",
+                "--output-root",
+                str(tmp_path / "out"),
+                "--max-jobs",
+                "1",
+            ],
+        )
+    finally:
+        main.run_full_batch_case = original
+
+    summary_path = tmp_path / "out" / "batch-rid" / "logs" / "summary.json"
+    assert result.exit_code == 0
+    assert calls[0][0] == "a"
+    assert calls[0][1] == "默认问题？"
+    assert "OK   a" in result.output
+    assert summary_path.is_file()
+    assert '"success_count": 1' in summary_path.read_text(encoding="utf-8")
+
+
+def test_cli_full_batch_exits_nonzero_for_failed_case(tmp_path) -> None:
+    from podcast_agent.cli import batch as main
+
+    cases_path = tmp_path / "cases.json"
+    cases_path.write_text(
+        """{
+  "version": 1,
+  "default_question": "默认问题？",
+  "cases": [
+    {"id": "a", "url": "https://www.youtube.com/watch?v=a"}
+  ]
+}
+""",
+        encoding="utf-8",
+    )
+
+    def fake_run_full_batch_case(*, case, output_dir, log_path):
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        log_path.write_text("failed\n", encoding="utf-8")
+        return FullBatchCaseResult(case=case, output_dir=output_dir, log_path=log_path, exit_code=7)
+
+    original = main.run_full_batch_case
+    main.run_full_batch_case = fake_run_full_batch_case
+    try:
+        result = CliRunner().invoke(
+            app,
+            [
+                "full-batch",
+                "--cases",
+                str(cases_path),
+                "--run-id",
+                "rid",
+                "--output-root",
+                str(tmp_path / "out"),
+            ],
+        )
+    finally:
+        main.run_full_batch_case = original
+
+    assert result.exit_code == 1
+    assert "FAIL a" in result.output
+    summary = (tmp_path / "out" / "batch-rid" / "logs" / "summary.json").read_text(encoding="utf-8")
+    assert '"failure_count": 1' in summary
+
+
+def test_cli_full_batch_rejects_duplicate_case_ids(tmp_path) -> None:
+    cases_path = tmp_path / "cases.json"
+    cases_path.write_text(
+        """{
+  "version": 1,
+  "default_question": "默认问题？",
+  "cases": [
+    {"id": "a", "url": "https://www.youtube.com/watch?v=a"},
+    {"id": "a", "url": "https://www.youtube.com/watch?v=b"}
+  ]
+}
+""",
+        encoding="utf-8",
+    )
+
+    result = CliRunner().invoke(app, ["full-batch", "--cases", str(cases_path), "--dry-run"])
+
+    assert result.exit_code == 1
+    assert "cases[].id must be unique" in result.output
+
+
 def test_cli_transcript_fetches_transcript(tmp_path) -> None:
-    from podcast_agent.cli import main
+    from podcast_agent.cli import audio as main
 
     output_dir = tmp_path / "transcript"
     runner = CliRunner()
@@ -291,7 +510,7 @@ def test_cli_transcript_fetches_transcript(tmp_path) -> None:
 
 
 def test_cli_evidence_extracts_evidence(tmp_path) -> None:
-    from podcast_agent.cli import main
+    from podcast_agent.cli import stages as main
 
     output_dir = tmp_path / "demo"
     (output_dir / "elements").mkdir(parents=True)
@@ -337,7 +556,7 @@ def test_cli_evidence_extracts_evidence(tmp_path) -> None:
 
 
 def test_cli_evidence_generates_upstream_artifacts_when_missing(tmp_path) -> None:
-    from podcast_agent.cli import main
+    from podcast_agent.cli import stages as main
 
     output_dir = tmp_path / "demo"
     runner = CliRunner()
@@ -408,7 +627,7 @@ def test_cli_evidence_requires_upstream_artifacts_or_url_and_question(tmp_path) 
 
 
 def test_cli_outline_generates_outline(tmp_path) -> None:
-    from podcast_agent.cli import main
+    from podcast_agent.cli import stages as main
 
     output_dir = tmp_path / "demo"
     runner = CliRunner()
@@ -442,7 +661,7 @@ def test_cli_outline_generates_outline(tmp_path) -> None:
 
 
 def test_cli_viewpoints_generates_viewpoints(tmp_path) -> None:
-    from podcast_agent.cli import main
+    from podcast_agent.cli import stages as main
 
     output_dir = tmp_path / "demo"
     runner = CliRunner()
@@ -476,7 +695,7 @@ def test_cli_viewpoints_generates_viewpoints(tmp_path) -> None:
 
 
 def test_cli_summary_generates_summary(tmp_path) -> None:
-    from podcast_agent.cli import main
+    from podcast_agent.cli import stages as main
 
     output_dir = tmp_path / "demo"
     runner = CliRunner()
@@ -510,7 +729,7 @@ def test_cli_summary_generates_summary(tmp_path) -> None:
 
 
 def test_cli_report_renders_markdown(tmp_path) -> None:
-    from podcast_agent.cli import main
+    from podcast_agent.cli import reports as main
 
     output_dir = tmp_path / "demo"
     runner = CliRunner()
@@ -519,6 +738,7 @@ def test_cli_report_renders_markdown(tmp_path) -> None:
         report_path = output_dir / "reports" / "report.md"
         report_path.parent.mkdir(parents=True, exist_ok=True)
         report_path.write_text("# Demo\n", encoding="utf-8")
+        report_path.with_suffix(".html").write_text("<!doctype html><html><body>Demo</body></html>\n", encoding="utf-8")
         return report_path
 
     original_report = main.render_markdown_report
@@ -539,10 +759,45 @@ def test_cli_report_renders_markdown(tmp_path) -> None:
     assert "Rendered report:" in result.output
     assert "Rendered HTML report:" in result.output
     assert (output_dir / "reports" / "report.md").is_file()
+    assert (output_dir / "reports" / "report.html").is_file()
+
+
+def test_cli_report_pdf_renders_existing_html(tmp_path) -> None:
+    from podcast_agent.cli import reports as main
+
+    output_dir = tmp_path / "demo"
+    runner = CliRunner()
+    calls = []
+
+    def fake_render_pdf_report(*, output_dir):
+        calls.append(str(output_dir))
+        pdf_path = output_dir / "reports" / "report.pdf"
+        pdf_path.parent.mkdir(parents=True, exist_ok=True)
+        pdf_path.write_bytes(b"%PDF")
+        return pdf_path
+
+    original_pdf = main.render_pdf_report
+    main.render_pdf_report = fake_render_pdf_report
+    try:
+        result = runner.invoke(
+            app,
+            [
+                "report-pdf",
+                "--output-dir",
+                str(output_dir),
+            ],
+        )
+    finally:
+        main.render_pdf_report = original_pdf
+
+    assert result.exit_code == 0
+    assert calls == [str(output_dir)]
+    assert "Rendered PDF report:" in result.output
+    assert (output_dir / "reports" / "report.pdf").is_file()
 
 
 def test_cli_transcribe_audio_writes_transcripts(tmp_path) -> None:
-    from podcast_agent.cli import main
+    from podcast_agent.cli import audio as main
 
     audio_path = tmp_path / "audio.wav"
     audio_path.write_bytes(b"audio")

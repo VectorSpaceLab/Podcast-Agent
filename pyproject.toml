@@ -23,6 +23,14 @@ dependencies = [
 dev = [
     "pytest>=8.3.0",
 ]
+pdf = [
+    "playwright>=1.45.0",
+]
+xhs = [
+    "markdown>=3.7",
+    "playwright>=1.45.0",
+    "PyYAML>=6.0.0",
+]
 
 [project.scripts]
 podcast-agent = "podcast_agent.cli.main:app"

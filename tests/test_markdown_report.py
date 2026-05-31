@@ -1,7 +1,11 @@
 from pathlib import Path
 
+import pytest
+
+from podcast_agent.errors import ReportRenderError
 from podcast_agent.intent import ReportIntent
 from podcast_agent.pipeline.artifacts import save_json
+from podcast_agent.reports.html import render_html_report, render_pdf_report
 from podcast_agent.reports.markdown import render_markdown_report, render_report_markdown
 
 
@@ -79,6 +83,7 @@ def _write_report_inputs(output_dir: Path) -> None:
         output_dir / "insights" / "summary.json",
         {
             "report_type": "summary",
+            "report_title": "物理AI转折点",
             "introduction": "导读内容。",
             "core_conclusions": [
                 {
@@ -113,6 +118,7 @@ def test_render_report_markdown_uses_workflow_v2_artifact_order() -> None:
             }
         ],
         summary={
+            "report_title": "AI转折点",
             "introduction": "导读。",
             "core_conclusions": [{"title": "结论", "rationale": "理由。"}],
             "one_paragraph_takeaway": "收束。",
@@ -136,6 +142,7 @@ def test_render_report_markdown_uses_english_locale_for_english_intent() -> None
         outline={"viewpoint_breakdown": []},
         details=[],
         summary={
+            "report_title": "AI Inflection",
             "introduction": "Intro.",
             "core_conclusions": [{"title": "Conclusion", "rationale": "Reason."}],
             "one_paragraph_takeaway": "Takeaway.",
@@ -148,6 +155,7 @@ def test_render_report_markdown_uses_english_locale_for_english_intent() -> None
     assert "## Viewpoint Breakdown" in markdown
     assert "## Takeaway" in markdown
     assert "## Source Info" in markdown
+    assert markdown.startswith("# AI Inflection")
     assert "- **Conclusion**: Reason." in markdown
     assert "- Author: Author" in markdown
 
@@ -161,7 +169,7 @@ def test_render_markdown_report_writes_report_file(tmp_path: Path) -> None:
     html = html_path.read_text(encoding="utf-8")
 
     assert report_path == tmp_path / "reports" / "report.md"
-    assert markdown.startswith("# Example Video")
+    assert markdown.startswith("# 物理AI转折点")
     assert "## 问题" not in markdown
     assert "这个视频讲了什么？" not in markdown
     assert markdown.index("### 1. 第二个观点") < markdown.index("### 2. 第一个观点")
@@ -169,9 +177,13 @@ def test_render_markdown_report_writes_report_file(tmp_path: Path) -> None:
     assert "> “引用一” [`00:10`](https://www.youtube.com/watch?v=xxxx&t=10s)\n\n    > “引用二” [`00:50`](https://www.youtube.com/watch?v=xxxx&t=50s)" in markdown
     assert html_path.is_file()
     assert (tmp_path / "reports" / "cover.jpg").read_bytes() == b"fake jpg"
-    assert '<img class="cover-image" src="cover.jpg" alt="Example Video">' in html
+    assert '<img class="cover-image" src="cover.jpg" alt="物理AI转折点">' in html
     assert '<h2 class="source-heading">来源信息</h2>' in html
     assert "font-size: 12pt" in html
+    assert '@font-face' in html
+    assert 'font-family: "LXGW WenKai"' in html
+    assert "LXGWWenKai-Regular.ttf" in html
+    assert "@media print" in html
 
 
 def test_render_markdown_report_skips_missing_cover(tmp_path: Path) -> None:
@@ -185,3 +197,24 @@ def test_render_markdown_report_skips_missing_cover(tmp_path: Path) -> None:
 
     assert report_path.with_suffix(".html").is_file()
     assert '<img class="cover-image"' not in html
+
+
+def test_render_html_report_uses_lxgw_wenkai_font(tmp_path: Path) -> None:
+    report_dir = tmp_path / "reports"
+    report_dir.mkdir(parents=True)
+    markdown_path = report_dir / "report.md"
+    markdown_path.write_text("# 标题\n\n正文。\n", encoding="utf-8")
+
+    html_path = render_html_report(output_dir=tmp_path, markdown_path=markdown_path)
+    html = html_path.read_text(encoding="utf-8")
+
+    assert '@font-face' in html
+    assert 'font-family: "LXGW WenKai"' in html
+    assert "LXGWWenKai-Regular.ttf" in html
+    assert "@page" in html
+    assert "@media print" in html
+
+
+def test_render_pdf_report_requires_html_report(tmp_path: Path) -> None:
+    with pytest.raises(ReportRenderError, match="reports/report.html is required"):
+        render_pdf_report(output_dir=tmp_path)

@@ -19,6 +19,7 @@ REPORT_SUMMARY_V1_INPUTS = [
     "The user's original question, used as the lens for the final synthesis.",
     "The target report language, which controls all user-facing generated summary fields.",
     "The target report length, which controls the number of core conclusions and the size of the introduction and takeaway.",
+    "The original video title, used to generate report_title by translation or localization.",
     "The video source URL, included only as source metadata.",
     "The video chapters, used only to understand the video's broad topic structure.",
     "The condensed viewpoint payload, containing viewpoint titles, viewpoint summaries, importance scores, importance reasons, sub-thesis titles, and short sub-thesis explanations.",
@@ -26,6 +27,12 @@ REPORT_SUMMARY_V1_INPUTS = [
 
 
 REPORT_SUMMARY_V1_BASE_OUTPUT_SHAPE_RULES = [
+    "The report_title must be a translation or localization of the original video title into the target report language.",
+    "Preserve the original video's meaning, named entities, and specificity in report_title.",
+    "Do not invent a new editorial title or summarize the report conclusions for report_title.",
+    "If the original video title is already in the target report language, keep it natural and only lightly clean it if needed.",
+    "If the original video title is not provided, write a concise fallback title from the report's central subject.",
+    "Do not use generic labels such as 报告标题, 标题, Report Title, or Title as report_title.",
     "The introduction must be a concise reader guide in the target report language that frames what the report answers and why the findings matter.",
     "Write the introduction as a natural editorial opening, not an executive-summary label.",
     "The introduction should read like a fluent lead paragraph that brings the reader into the interview's central tension, speaker judgments, and report throughline.",
@@ -41,7 +48,7 @@ REPORT_SUMMARY_V1_BASE_OUTPUT_SHAPE_RULES = [
 
 
 REPORT_SUMMARY_V1_INTENT_RULES = [
-    "Treat the target report language as a hard constraint for introduction, core conclusion titles, core conclusion rationales, and one_paragraph_takeaway.",
+    "Treat the target report language as a hard constraint for report_title, introduction, core conclusion titles, core conclusion rationales, and one_paragraph_takeaway.",
     "Do not use the question language, subtitle language, or video language as the summary language when they conflict with the target report language.",
     "Treat the target report length as a synthesis constraint for summary density and paragraph length.",
     "For brief reports, write only the strongest editorial conclusions and keep the opening and takeaway tight.",
@@ -107,6 +114,7 @@ REPORT_SUMMARY_V1_OUTPUT_RULES = [
 REPORT_SUMMARY_V1_SCHEMA = {
     "report_type": "summary",
     "language": "<target_language>",
+    "report_title": "<translated or localized original video title in the target report language>",
     "introduction": "<natural editorial introduction in the target report language>",
     "core_conclusions": [
         {
@@ -151,10 +159,10 @@ def _summary_intent_requirement_lines(report_intent: ReportIntent | None) -> lis
 def _summary_output_shape_lines(report_intent: ReportIntent | None) -> list[str]:
     payload = summary_intent_payload(report_intent)
     return [
-        *REPORT_SUMMARY_V1_BASE_OUTPUT_SHAPE_RULES[:3],
+        *REPORT_SUMMARY_V1_BASE_OUTPUT_SHAPE_RULES[:8],
         f"Keep the introduction around {payload['target_introduction_length']}.",
         f"Distill only the essence into {payload['target_core_conclusions']} sharp, report-level core conclusions.",
-        *REPORT_SUMMARY_V1_BASE_OUTPUT_SHAPE_RULES[3:],
+        *REPORT_SUMMARY_V1_BASE_OUTPUT_SHAPE_RULES[8:],
         f"Keep the one_paragraph_takeaway around {payload['target_takeaway_length']}.",
     ]
 
@@ -164,6 +172,7 @@ def build_report_summary_v1_prompt(
     question: str,
     viewpoints: dict[str, Any],
     chapters: list[Any] | None = None,
+    video_title: str | None = None,
     source_url: str | None = None,
     report_intent: ReportIntent | None = None,
 ) -> str:
@@ -205,6 +214,9 @@ def build_report_summary_v1_prompt(
             "",
             "Report Intent:",
             json.dumps(summary_intent_payload(report_intent), ensure_ascii=False, indent=2),
+            "",
+            "Video Title:",
+            video_title.strip() if video_title and video_title.strip() else "(not provided)",
             "",
             "Video URL:",
             source_url.strip() if source_url and source_url.strip() else "(not provided)",
