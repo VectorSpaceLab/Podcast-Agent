@@ -13,15 +13,14 @@
 
 Podcast-Agent turns YouTube podcasts and long-form videos into structured reports for faster understanding and analysis.
 
-[Homepage](https://vectorspacelab.github.io/Podcast-Agent/)
-
-[Overview](#overview) | [Architecture](#architecture) | [Project Structure](#project-structure) | [Installation](#installation) | [Quick Start](#quick-start) | [CLI Usage](#cli-usage)
+[Homepage](https://vectorspacelab.github.io/Podcast-Agent/) | [Overview](#overview) | [Architecture](#architecture) | [Project Structure](#project-structure) | [Installation](#installation) | [Quick Start](#quick-start) | [CLI Usage](#cli-usage)
 
 ## Overview
 
 Podcast-Agent is useful when you want to:
 
 - Quickly understand what a podcast or long-form video is about.
+- Produce reports in multiple formats, including editable Markdown, PDF, and Xiaohongshu-style image outputs.
 - Generate shareable reports in multiple formats for easier distribution.
 - Save intermediate artifacts for review, debugging, or downstream analysis.
 
