@@ -1,0 +1,661 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Podcast-Agent</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: #fbfaf7;
+        color: #111111;
+        font-family: "Times New Roman", Times, serif;
+        font-size: 18px;
+        line-height: 1.65;
+      }
+
+      main {
+        width: min(900px, calc(100% - 32px));
+        margin: 0 auto;
+        padding: 56px 0 72px;
+      }
+
+      header,
+      section {
+        border-bottom: 1px solid #e0d8ce;
+        margin: 0 0 38px;
+        padding: 0 0 38px;
+      }
+
+      section:last-child {
+        border-bottom: 0;
+        margin-bottom: 0;
+        padding-bottom: 0;
+      }
+
+      h1,
+      h2 {
+        line-height: 1.2;
+      }
+
+      header {
+        text-align: center;
+      }
+
+      h1 {
+        margin: 0 0 14px;
+        font-size: clamp(48px, 8vw, 76px);
+        font-weight: 700;
+        letter-spacing: 0.01em;
+      }
+
+      h2 {
+        margin: 0 0 16px;
+        font-size: 34px;
+        font-weight: 700;
+      }
+
+      p {
+        margin: 0 0 16px;
+      }
+
+      ul {
+        margin: 0 0 16px;
+        padding-left: 24px;
+      }
+
+      li + li {
+        margin-top: 8px;
+      }
+
+      pre {
+        margin: 16px 0 18px;
+        padding: 16px;
+        overflow-x: auto;
+        border: 1px solid #e0d8ce;
+        background: #fffdf9;
+        font-family: "Courier New", Courier, monospace;
+        font-size: 15px;
+        line-height: 1.5;
+      }
+
+      a {
+        color: #111111;
+      }
+
+      nav {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 0 10px;
+        margin: 24px auto 0;
+        max-width: 780px;
+        color: #4d463f;
+        font-size: 16px;
+        line-height: 1.6;
+      }
+
+      nav a {
+        border-left: 1px solid #b9aa98;
+        padding-left: 10px;
+        white-space: nowrap;
+      }
+
+      nav a:first-child {
+        border-left: 0;
+        padding-left: 0;
+      }
+
+      .workflow-intro {
+        max-width: 780px;
+      }
+
+      .workflow-diagram-wrap {
+        margin-top: 20px;
+        overflow-x: auto;
+        border: 1px solid #d8cdbf;
+        border-radius: 8px;
+        background: #fffdf9;
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.75);
+      }
+
+      .workflow-diagram {
+        display: block;
+        width: 100%;
+        min-width: 860px;
+        height: auto;
+        font-family: "Times New Roman", Times, serif;
+      }
+
+      .workflow-diagram text {
+        fill: #17130f;
+      }
+
+      .workflow-diagram .stage {
+        fill: #fbfaf7;
+        stroke: #b9aa98;
+        stroke-width: 1.2;
+      }
+
+      .workflow-diagram .stage-strong {
+        fill: #efe6da;
+        stroke: #8f7a63;
+      }
+
+      .workflow-diagram .artifact {
+        fill: #ffffff;
+        stroke: #d2c6b8;
+        stroke-width: 1;
+      }
+
+      .workflow-diagram .arrow {
+        fill: none;
+        stroke: #6f6255;
+        stroke-width: 1.6;
+        marker-end: url(#workflow-arrow);
+      }
+
+      .workflow-diagram .rail {
+        fill: none;
+        stroke: #cdbfad;
+        stroke-dasharray: 4 5;
+        stroke-width: 1.1;
+      }
+
+      .workflow-details {
+        margin-top: 24px;
+      }
+
+      button {
+        width: 38px;
+        height: 38px;
+        border: 1px solid #d2c6b8;
+        border-radius: 50%;
+        background: #fffdf9;
+        color: #3b332b;
+        cursor: pointer;
+        font-family: "Times New Roman", Times, serif;
+        font-size: 22px;
+        line-height: 1;
+        box-shadow: 0 5px 14px rgba(40, 28, 16, 0.08);
+        transition:
+          background 160ms ease,
+          border-color 160ms ease,
+          box-shadow 160ms ease,
+          transform 160ms ease;
+      }
+
+      button:hover:not(:disabled) {
+        background: #f4eee6;
+        border-color: #b9aa98;
+        box-shadow: 0 8px 20px rgba(40, 28, 16, 0.12);
+        transform: translateY(-1px);
+      }
+
+      button:disabled {
+        color: #aaaaaa;
+        cursor: default;
+      }
+
+      header p {
+        max-width: 760px;
+        margin-left: auto;
+        margin-right: auto;
+        color: #2f2a25;
+      }
+
+      .pdf-header {
+        margin-bottom: 12px;
+        text-align: center;
+      }
+
+      .pdf-meta {
+        margin: 0;
+        color: #555555;
+        font-size: 15px;
+      }
+
+      .pdf-stage {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 430px;
+        overflow: hidden;
+      }
+
+      .pdf-cover-link {
+        display: block;
+        width: min(100%, 300px);
+        margin: 0 auto;
+        text-decoration: none;
+        z-index: 3;
+      }
+
+      .pdf-cover {
+        overflow: hidden;
+        border: 1px solid #d8cdbf;
+        border-radius: 8px;
+        background: #fffdf9;
+        padding: 8px;
+        box-shadow:
+          0 16px 34px rgba(40, 28, 16, 0.1),
+          inset 0 0 0 1px rgba(255, 255, 255, 0.75);
+        transition:
+          border-color 160ms ease,
+          box-shadow 160ms ease,
+          transform 160ms ease;
+      }
+
+      .pdf-cover-link:hover .pdf-cover {
+        border-color: #bcae9c;
+        box-shadow: 0 20px 42px rgba(40, 28, 16, 0.14);
+        transform: translateY(-2px);
+      }
+
+      .pdf-cover img {
+        display: block;
+        width: 100%;
+        height: auto;
+        border-radius: 4px;
+      }
+
+      .pdf-open {
+        margin: 10px 0 0;
+        color: #6a5e52;
+        font-size: 14px;
+        text-align: center;
+      }
+
+      .pdf-side {
+        position: absolute;
+        top: 48px;
+        z-index: 1;
+        width: 230px;
+        opacity: 0.42;
+        filter: saturate(0.78);
+        pointer-events: none;
+        transform: scale(0.86);
+      }
+
+      .pdf-side img {
+        display: block;
+        width: 100%;
+        height: auto;
+        border: 1px solid #d8cdbf;
+        border-radius: 8px;
+        background: #fffdf9;
+        padding: 6px;
+        box-shadow: 0 12px 28px rgba(40, 28, 16, 0.08);
+      }
+
+      .pdf-side-prev {
+        left: calc(50% - 330px);
+      }
+
+      .pdf-side-next {
+        right: calc(50% - 330px);
+      }
+
+      .pdf-arrow {
+        position: absolute;
+        top: 50%;
+        z-index: 4;
+        transform: translateY(-50%);
+      }
+
+      .pdf-arrow:hover:not(:disabled) {
+        transform: translateY(calc(-50% - 1px));
+      }
+
+      #pdf-prev {
+        left: 24px;
+      }
+
+      #pdf-next {
+        right: 24px;
+      }
+
+      .empty {
+        display: none;
+        border: 1px solid #e0d8ce;
+        padding: 24px;
+        background: #fffdf9;
+      }
+
+      @media (max-width: 640px) {
+        main {
+          width: min(100% - 40px, 900px);
+          padding-top: 32px;
+        }
+
+        body {
+          font-size: 17px;
+        }
+
+        h1 {
+          font-size: 40px;
+        }
+
+        h2 {
+          font-size: 32px;
+        }
+
+        p,
+        li {
+          overflow-wrap: anywhere;
+        }
+
+        .pdf-stage {
+          min-height: 350px;
+        }
+
+        button {
+          width: 34px;
+          height: 34px;
+          font-size: 20px;
+        }
+
+        .pdf-cover-link {
+          width: min(100%, 240px);
+        }
+
+        .pdf-side {
+          width: 170px;
+          top: 48px;
+          opacity: 0.32;
+        }
+
+        .pdf-side-prev {
+          left: calc(50% - 190px);
+        }
+
+        .pdf-side-next {
+          right: calc(50% - 190px);
+        }
+
+        #pdf-prev {
+          left: 2px;
+        }
+
+        #pdf-next {
+          right: 2px;
+        }
+
+        .workflow-diagram {
+          min-width: 780px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Podcast-Agent</h1>
+        <p>
+          Podcast-Agent turns YouTube podcasts and long-form videos into
+          structured reports for faster understanding and analysis.
+        </p>
+        <nav aria-label="Page sections">
+          <a href="#overview">Overview</a>
+          <a href="#key-features">Key Features</a>
+          <a href="#agentic-workflow">Agentic Workflow</a>
+          <a href="#demo-pdfs">Demo PDFs</a>
+        </nav>
+      </header>
+
+      <section id="overview">
+        <h2>Overview</h2>
+        <p>Podcast-Agent is useful when you want to:</p>
+        <ul>
+          <li>Quickly understand what a podcast or long-form video is about.</li>
+          <li>Ask a focused question about a video and collect relevant evidence.</li>
+          <li>Turn video content into viewpoints, summaries, and reports.</li>
+          <li>Save intermediate artifacts for review, debugging, or downstream analysis.</li>
+        </ul>
+        <p>Current input support is centered on YouTube videos.</p>
+      </section>
+
+      <section id="key-features">
+        <h2>Key Features</h2>
+        <ul>
+          <li>Generate a structured report from a podcast or long-form video.</li>
+          <li>Quickly understand the core content without watching the full episode.</li>
+          <li>Organize and interpret the key viewpoints discussed in the podcast.</li>
+          <li>Jump from important report moments directly back to the original video.</li>
+        </ul>
+      </section>
+
+      <section id="agentic-workflow">
+        <h2>Agentic Workflow</h2>
+        <p class="workflow-intro">
+          Podcast-Agent is designed as an inspectable agentic pipeline rather than a
+          single opaque prompt. Each stage writes durable artifacts, so a long video
+          can be reviewed, debugged, resumed, and rendered into multiple report forms.
+        </p>
+
+        <div class="workflow-diagram-wrap">
+          <svg class="workflow-diagram" viewBox="0 0 980 430" role="img" aria-labelledby="workflow-title workflow-desc">
+            <title id="workflow-title">Podcast-Agent agentic workflow diagram</title>
+            <desc id="workflow-desc">
+              A YouTube URL and user question flow through intent detection, source ingestion,
+              evidence extraction, outline generation, viewpoint writing, summary creation, and report rendering.
+            </desc>
+            <defs>
+              <marker id="workflow-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+                <path d="M0,0 L8,4 L0,8 Z" fill="#6f6255"></path>
+              </marker>
+            </defs>
+
+            <text x="38" y="39" font-size="16" font-weight="700">Input</text>
+            <rect class="stage stage-strong" x="34" y="54" width="166" height="66" rx="7"></rect>
+            <text x="117" y="81" font-size="17" text-anchor="middle" font-weight="700">URL + Question</text>
+            <text x="117" y="103" font-size="13" text-anchor="middle">user intent starts the run</text>
+
+            <path class="arrow" d="M200 87 H261"></path>
+
+            <text x="276" y="39" font-size="16" font-weight="700">Reasoning stages</text>
+            <rect class="stage" x="266" y="54" width="142" height="66" rx="7"></rect>
+            <text x="337" y="81" font-size="17" text-anchor="middle" font-weight="700">Intent</text>
+            <text x="337" y="103" font-size="13" text-anchor="middle">language and depth</text>
+
+            <path class="arrow" d="M408 87 H475"></path>
+
+            <rect class="stage" x="482" y="54" width="166" height="66" rx="7"></rect>
+            <text x="565" y="81" font-size="17" text-anchor="middle" font-weight="700">Ingest</text>
+            <text x="565" y="103" font-size="13" text-anchor="middle">metadata and transcript</text>
+
+            <path class="arrow" d="M565 120 V159"></path>
+
+            <rect class="stage" x="482" y="166" width="166" height="66" rx="7"></rect>
+            <text x="565" y="193" font-size="17" text-anchor="middle" font-weight="700">Evidence</text>
+            <text x="565" y="215" font-size="13" text-anchor="middle">chapter-aware segments</text>
+
+            <path class="arrow" d="M482 199 H415"></path>
+
+            <rect class="stage" x="266" y="166" width="142" height="66" rx="7"></rect>
+            <text x="337" y="193" font-size="17" text-anchor="middle" font-weight="700">Outline</text>
+            <text x="337" y="215" font-size="13" text-anchor="middle">argument structure</text>
+
+            <path class="arrow" d="M337 232 V271"></path>
+
+            <rect class="stage" x="266" y="278" width="142" height="66" rx="7"></rect>
+            <text x="337" y="305" font-size="17" text-anchor="middle" font-weight="700">Viewpoints</text>
+            <text x="337" y="327" font-size="13" text-anchor="middle">parallel detail passes</text>
+
+            <path class="arrow" d="M408 311 H475"></path>
+
+            <rect class="stage" x="482" y="278" width="166" height="66" rx="7"></rect>
+            <text x="565" y="305" font-size="17" text-anchor="middle" font-weight="700">Summary</text>
+            <text x="565" y="327" font-size="13" text-anchor="middle">conclusions and order</text>
+
+            <path class="arrow" d="M648 311 H733"></path>
+
+            <text x="750" y="263" font-size="16" font-weight="700">Outputs</text>
+            <rect class="stage stage-strong" x="738" y="278" width="178" height="66" rx="7"></rect>
+            <text x="827" y="305" font-size="17" text-anchor="middle" font-weight="700">Reports</text>
+            <text x="827" y="327" font-size="13" text-anchor="middle">Markdown, HTML, PDF, XHS</text>
+
+            <path class="rail" d="M117 133 V381 H827 V354"></path>
+            <text x="38" y="391" font-size="14" font-weight="700">Artifact trail</text>
+            <rect class="artifact" x="152" y="364" width="102" height="34" rx="5"></rect>
+            <text x="203" y="386" font-size="13" text-anchor="middle">input.json</text>
+            <rect class="artifact" x="272" y="364" width="104" height="34" rx="5"></rect>
+            <text x="324" y="386" font-size="13" text-anchor="middle">source.json</text>
+            <rect class="artifact" x="394" y="364" width="104" height="34" rx="5"></rect>
+            <text x="446" y="386" font-size="13" text-anchor="middle">elements/</text>
+            <rect class="artifact" x="516" y="364" width="104" height="34" rx="5"></rect>
+            <text x="568" y="386" font-size="13" text-anchor="middle">insights/</text>
+            <rect class="artifact" x="638" y="364" width="104" height="34" rx="5"></rect>
+            <text x="690" y="386" font-size="13" text-anchor="middle">reports/</text>
+          </svg>
+        </div>
+
+        <ul class="workflow-details">
+          <li>
+            The run starts by saving <code>input.json</code>, resolving the YouTube
+            source into <code>source.json</code>, and detecting report intent from the
+            question. That intent controls the report language and whether the output
+            should be brief, default, or detailed.
+          </li>
+          <li>
+            Ingestion uses <code>yt-dlp</code> to fetch normalized metadata and ranked
+            subtitle tracks. If subtitles are unavailable, the pipeline can download
+            audio and fall back to an audio transcriber, then writes both
+            <code>transcript.vtt</code> and <code>transcript.txt</code>.
+          </li>
+          <li>
+            Evidence extraction parses the VTT transcript into timed subtitle segments,
+            prefers chapter-based chunks when metadata has chapters, otherwise uses
+            overlapping ten-minute windows, and asks the model to keep the most relevant
+            evidence for the user's question.
+          </li>
+          <li>
+            The outline stage turns evidence, metadata, source URL, chapters, and the
+            question into a viewpoint breakdown. Viewpoint generation then selects the
+            highest-importance viewpoints and writes detailed sub-theses, often in
+            parallel, while preserving links back to supporting evidence indexes.
+          </li>
+          <li>
+            Summary generation condenses the selected viewpoints into an introduction,
+            core conclusions, viewpoint order, and takeaway. The same artifact set then
+            renders to Markdown, HTML, PDF, and Xiaohongshu image output, so every format
+            shares one analytical core.
+          </li>
+        </ul>
+      </section>
+
+      <section id="demo-pdfs">
+        <h2>Demo PDFs</h2>
+        <div id="pdf-empty" class="empty">
+          Put PDF files in <code>demo-pdf/</code>, then add their filenames to
+          <code>pdfFiles</code> in this page.
+        </div>
+
+        <div id="pdf-viewer">
+          <div class="pdf-header">
+            <p id="pdf-count" class="pdf-meta">1 / 5</p>
+          </div>
+
+          <div class="pdf-stage">
+            <div class="pdf-side pdf-side-prev">
+              <img id="pdf-prev-cover" src="demo-pdf/demo-1-cover.jpg" alt="">
+            </div>
+            <button id="pdf-prev" class="pdf-arrow" type="button" aria-label="Previous PDF">&lt;</button>
+            <a id="pdf-cover-link" class="pdf-cover-link" href="demo-pdf/demo-4.pdf" target="_blank" rel="noopener">
+              <div class="pdf-cover">
+                <img id="pdf-cover" src="demo-pdf/demo-4-cover.jpg" alt="demo-4 PDF cover">
+              </div>
+              <p class="pdf-open">Click the cover to preview the PDF.</p>
+            </a>
+            <button id="pdf-next" class="pdf-arrow" type="button" aria-label="Next PDF">&gt;</button>
+            <div class="pdf-side pdf-side-next">
+              <img id="pdf-next-cover" src="demo-pdf/demo-5-cover.jpg" alt="">
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      const pdfFiles = [
+        {
+          title: "demo-4.pdf",
+          pdf: "demo-4.pdf",
+          cover: "demo-4-cover.jpg",
+          alt: "demo-4 PDF cover",
+        },
+        {
+          title: "demo-5.pdf",
+          pdf: "demo-5.pdf",
+          cover: "demo-5-cover.jpg",
+          alt: "demo-5 PDF cover",
+        },
+        {
+          title: "demo-3.pdf",
+          pdf: "demo-3.pdf",
+          cover: "demo-3-cover.jpg",
+          alt: "demo-3 PDF cover",
+        },
+        {
+          title: "demo-2.pdf",
+          pdf: "demo-2.pdf",
+          cover: "demo-2-cover.jpg",
+          alt: "demo-2 PDF cover",
+        },
+        {
+          title: "demo-1.pdf",
+          pdf: "demo-1.pdf",
+          cover: "demo-1-cover.jpg",
+          alt: "demo-1 PDF cover",
+        },
+      ];
+
+      const viewer = document.getElementById("pdf-viewer");
+      const empty = document.getElementById("pdf-empty");
+      const coverLink = document.getElementById("pdf-cover-link");
+      const cover = document.getElementById("pdf-cover");
+      const prevCover = document.getElementById("pdf-prev-cover");
+      const nextCover = document.getElementById("pdf-next-cover");
+      const count = document.getElementById("pdf-count");
+      const prev = document.getElementById("pdf-prev");
+      const next = document.getElementById("pdf-next");
+      let currentPdf = 0;
+
+      function fileUrl(filename) {
+        return `demo-pdf/${filename}`;
+      }
+
+      function showPdf(index) {
+        currentPdf = (index + pdfFiles.length) % pdfFiles.length;
+        const item = pdfFiles[currentPdf];
+        const previous = pdfFiles[(currentPdf - 1 + pdfFiles.length) % pdfFiles.length];
+        const nextItem = pdfFiles[(currentPdf + 1) % pdfFiles.length];
+        const pdfUrl = fileUrl(item.pdf);
+
+        coverLink.href = pdfUrl;
+        cover.src = fileUrl(item.cover);
+        cover.alt = item.alt;
+        prevCover.src = fileUrl(previous.cover);
+        nextCover.src = fileUrl(nextItem.cover);
+        count.textContent = `${currentPdf + 1} / ${pdfFiles.length}`;
+        prev.disabled = pdfFiles.length <= 1;
+        next.disabled = pdfFiles.length <= 1;
+      }
+
+      if (pdfFiles.length === 0) {
+        empty.style.display = "block";
+        viewer.style.display = "none";
+      } else {
+        showPdf(0);
+      }
+
+      prev.addEventListener("click", () => showPdf(currentPdf - 1));
+      next.addEventListener("click", () => showPdf(currentPdf + 1));
+    </script>
+  </body>
+</html>
