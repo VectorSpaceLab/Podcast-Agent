@@ -57,20 +57,136 @@ src/podcast_agent/
 
 ## Installation
 
-Podcast-Agent requires Python 3.10 or later.
+### 1. System Requirements
+
+- Python 3.10+
+- `ffmpeg`
+- Playwright Chromium
+- Network access to YouTube, DeepSeek, Aliyun DashScope ASR, and Aliyun OSS
+- Fonts are bundled; no extra font installation is required
+
+Common system dependency installation:
+
+```bash
+# macOS
+brew install python ffmpeg
+
+# Ubuntu / Debian
+sudo apt-get update
+sudo apt-get install -y python3 python3-venv python3-pip ffmpeg
+```
+
+If Chromium fails to launch on Linux, install the required Playwright system libraries:
+
+```bash
+.venv/bin/playwright install-deps chromium
+```
+
+### 2. Virtual Environment
+
+Create a virtual environment and install Python dependencies from the project root:
 
 ```bash
 python -m venv .venv
-.venv/bin/pip install -e ".[dev]"
+.venv/bin/pip install -U pip
+.venv/bin/pip install -e ".[dev,pdf,xhs]"
+.venv/bin/playwright install chromium
 ```
 
-Create a local environment file:
+Verify that the CLI is available:
+
+```bash
+.venv/bin/podcast-agent --help
+```
+
+### 3. Environment Variables
+
+Copy the environment template:
 
 ```bash
 cp .env.example .env
 ```
 
-Then fill in the configuration needed for your runtime, such as LLM credentials, YouTube cookies, Aliyun ASR, OSS, and the ffmpeg binary path.
+Then fill in `.env`:
+
+```env
+DEEPSEEK_API_KEY=
+DEEPSEEK_API_BASE=https://api.deepseek.com/v1
+DEEPSEEK_MODEL=deepseek-chat
+
+YOUTUBE_COOKIES_FILE=
+
+ALIYUN_API_KEY=
+OSS_ENDPOINT=
+OSS_BUCKET_NAME=
+OSS_ACCESS_KEY_ID=
+OSS_ACCESS_KEY_SECRET=
+```
+
+#### 3.1 DeepSeek Model
+
+Create an API key in the DeepSeek console, then set:
+
+```env
+DEEPSEEK_API_KEY=<your-deepseek-api-key>
+DEEPSEEK_API_BASE=https://api.deepseek.com/v1
+DEEPSEEK_MODEL=deepseek-chat
+```
+
+To use another DeepSeek model, only change `DEEPSEEK_MODEL`.
+
+#### 3.2 YouTube Cookies
+
+1. Install the browser extension `Get cookies.txt LOCALLY`.
+2. Log in to your YouTube account.
+3. Open YouTube and export `cookies.txt` with the extension.
+4. Place `cookies.txt` in the project root:
+
+```text
+Podcast-Agent/
+├── cookies.txt
+├── README.md
+└── src/
+```
+
+5. Set the cookies file path in `.env`:
+
+```env
+YOUTUBE_COOKIES_FILE=./cookies.txt
+```
+
+If commands are run from another working directory, use an absolute path:
+
+```env
+YOUTUBE_COOKIES_FILE=/absolute/path/to/Podcast-Agent/cookies.txt
+```
+
+Notes:
+
+- The cookies file contains login credentials. Do not commit it or share it.
+- If the cookies expire, export the file again.
+
+#### 3.3 Aliyun Transcription
+
+Prepare an Aliyun DashScope API key and OSS bucket configuration.
+
+Set:
+
+- `ALIYUN_API_KEY`: Create an API key in the Aliyun Bailian / DashScope console.
+- `OSS_ENDPOINT`: Find the endpoint on the OSS bucket overview page, for example `https://oss-cn-hangzhou.aliyuncs.com`.
+- `OSS_BUCKET_NAME`: Use the OSS bucket name.
+- `OSS_ACCESS_KEY_ID`: Create an AccessKey in Aliyun RAM.
+- `OSS_ACCESS_KEY_SECRET`: Use the matching AccessKey secret.
+
+`.env` example:
+
+```env
+ALIYUN_API_KEY=<your-dashscope-api-key>
+OSS_ENDPOINT=https://oss-cn-hangzhou.aliyuncs.com
+OSS_BUCKET_NAME=<your-oss-bucket-name>
+OSS_ACCESS_KEY_ID=<your-oss-access-key-id>
+OSS_ACCESS_KEY_SECRET=<your-oss-access-key-secret>
+```
 
 ## Quick Start
 
