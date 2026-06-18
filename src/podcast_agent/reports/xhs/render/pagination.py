@@ -25,7 +25,6 @@ def paginate_measured_blocks(
     pages = _fix_orphan_headings(pages, usable_height=usable_height)
     pages = _keep_quotes_with_previous_paragraph(pages, usable_height=usable_height)
     pages = _split_paragraphs_to_fill_pages(pages, usable_height=usable_height)
-    pages = _rebalance_last_page(pages, usable_height=usable_height, target_height=target_height)
     pages = _merge_adjacent_pages_when_possible(pages, usable_height=usable_height)
     return [page for page in pages if page]
 
@@ -154,27 +153,6 @@ def _keep_quotes_with_previous_paragraph(
     return [page for page in pages if page]
 
 
-def _rebalance_last_page(
-    pages: list[list[XhsMeasuredBlock]],
-    *,
-    usable_height: float,
-    target_height: float,
-) -> list[list[XhsMeasuredBlock]]:
-    while len(pages) >= 2 and page_height(pages[-1]) < target_height * 0.55:
-        previous_page = pages[-2]
-        last_page = pages[-1]
-        if len(previous_page) <= 1:
-            break
-        candidate = previous_page[-1]
-        if candidate.kind == "heading":
-            break
-        if page_height(last_page) + candidate.outer_height > usable_height:
-            break
-        previous_page.pop()
-        last_page.insert(0, candidate)
-    return [page for page in pages if page]
-
-
 def _merge_adjacent_pages_when_possible(
     pages: list[list[XhsMeasuredBlock]],
     *,
@@ -206,14 +184,11 @@ def _split_paragraphs_to_fill_pages(
         remaining_height = usable_height - page_height(page)
         if next_block.kind != "paragraph" or remaining_height < usable_height * 0.18:
             continue
-        if next_block.outer_height <= remaining_height:
-            continue
         split = split_paragraph_block(next_block, available_height=remaining_height)
-        if split is None:
-            continue
-        head, tail = split
-        page.append(head)
-        next_page[0] = tail
+        if split is not None:
+            head, tail = split
+            page.append(head)
+            next_page[0] = tail
     return [page for page in pages if page]
 
 

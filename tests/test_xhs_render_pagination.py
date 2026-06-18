@@ -3,17 +3,17 @@ from podcast_agent.reports.xhs.render.pagination import paginate_measured_blocks
 from tests.xhs_helpers import measured_block
 
 
-def test_paginate_measured_blocks_balances_sparse_last_page() -> None:
+def test_paginate_measured_blocks_leaves_sparse_last_page_unchanged() -> None:
     blocks = [
-        measured_block("b1", "paragraph", 300),
-        measured_block("b2", "paragraph", 300),
-        measured_block("b3", "paragraph", 300),
-        measured_block("b4", "paragraph", 300),
+        measured_block("b1", "paragraph", 100),
+        measured_block("b2", "paragraph", 100),
+        measured_block("b3", "paragraph", 600),
+        measured_block("b4", "paragraph", 250),
     ]
 
     pages = paginate_measured_blocks(blocks=blocks, usable_height=1000)
 
-    assert [[block.id for block in page] for page in pages] == [["b1", "b2"], ["b3", "b4"]]
+    assert [[block.id for block in page] for page in pages] == [["b1", "b2", "b3"], ["b4"]]
 
 
 def test_paginate_measured_blocks_moves_orphan_heading_to_next_page() -> None:
@@ -83,6 +83,23 @@ def test_paginate_measured_blocks_splits_paragraph_to_fill_previous_page() -> No
     assert pages[1][0].id == "b2b"
     assert pages[1][0].continuation is True
     assert pages[1][0].text in long_text
+
+
+def test_paginate_measured_blocks_splits_next_paragraph_to_fill_previous_page() -> None:
+    text = "第一句补到上一页，交代背景和主要观点。第二句留在下一页，继续解释为什么这个变化重要。第三句继续展开，把剩余信息放在后面。"
+    blocks = [
+        measured_block("b1", "paragraph", 300),
+        measured_block("b2", "paragraph", 300),
+        measured_block("b3", "paragraph", 900, text=text),
+        measured_block("b4", "paragraph", 1000),
+    ]
+
+    pages = paginate_measured_blocks(blocks=blocks, usable_height=1200)
+
+    assert [block.id for block in pages[0]] == ["b1", "b2", "b3a"]
+    assert pages[0][-1].split_from == "b3"
+    assert pages[1][0].id == "b3b"
+    assert pages[1][0].continuation is True
 
 
 def test_split_paragraph_block_uses_sentence_prefix_when_possible() -> None:
