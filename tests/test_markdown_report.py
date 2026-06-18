@@ -39,8 +39,8 @@ def _write_report_inputs(output_dir: Path) -> None:
         output_dir / "insights" / "outline.json",
         {
             "viewpoint_breakdown": [
-                {"id": "V1", "title": "第一个观点"},
-                {"id": "V2", "title": "第二个观点"},
+                {"id": "V1", "title": "第一个观点", "evidence_segment_indexes": [1, 2]},
+                {"id": "V2", "title": "第二个观点", "evidence_segment_indexes": [5]},
             ]
         },
     )
@@ -48,8 +48,8 @@ def _write_report_inputs(output_dir: Path) -> None:
         output_dir / "insights" / "viewpoints.json",
         {
             "viewpoint_breakdown": [
-                {"id": "V1", "title": "第一个观点"},
-                {"id": "V2", "title": "第二个观点"},
+                {"id": "V1", "title": "第一个观点", "evidence_segment_indexes": [1, 2]},
+                {"id": "V2", "title": "第二个观点", "evidence_segment_indexes": [5]},
             ],
             "viewpoint_details": [
                 {
@@ -104,7 +104,7 @@ def test_render_report_markdown_uses_workflow_v2_artifact_order() -> None:
         metadata={"title": "标题", "author": "作者", "duration_seconds": 65},
         source_url="https://www.youtube.com/watch?v=xxxx",
         evidence={"segments": [{"index": 1, "start": "00:00:05.000"}]},
-        outline={"viewpoint_breakdown": [{"id": "V1", "title": "观点"}]},
+        outline={"viewpoint_breakdown": [{"id": "V1", "title": "观点", "evidence_segment_indexes": [1]}]},
         details=[
             {
                 "viewpoint_id": "V1",
@@ -128,7 +128,9 @@ def test_render_report_markdown_uses_workflow_v2_artifact_order() -> None:
     assert markdown.index("## 导读") < markdown.index("## 核心结论")
     assert markdown.index("## 核心结论") < markdown.index("## 观点拆解")
     assert markdown.index("## 观点拆解") < markdown.index("## 总结")
-    assert "- **子论点**：解释 [`00:05`](https://www.youtube.com/watch?v=xxxx&t=5s)" in markdown
+    assert "### 1. 观点 [`00:05`](https://www.youtube.com/watch?v=xxxx&t=5s)" in markdown
+    assert "- **子论点**：解释" in markdown
+    assert "- **子论点**：解释 [`00:05`](https://www.youtube.com/watch?v=xxxx&t=5s)" not in markdown
     assert "- 作者：作者" in markdown
     assert "- 时长：1:05" in markdown
 
@@ -166,7 +168,7 @@ def test_render_report_markdown_normalizes_bilibili_trailing_slash_timestamp_url
         metadata={"title": "Demo", "author": "Author"},
         source_url="https://www.bilibili.com/video/BV1vL4y157R1/",
         evidence={"segments": [{"index": 1, "start": "00:10:01.000"}]},
-        outline={"viewpoint_breakdown": [{"id": "V1", "title": "观点"}]},
+        outline={"viewpoint_breakdown": [{"id": "V1", "title": "观点", "evidence_segment_indexes": [1]}]},
         details=[
             {
                 "viewpoint_id": "V1",
@@ -187,7 +189,89 @@ def test_render_report_markdown_normalizes_bilibili_trailing_slash_timestamp_url
         },
     )
 
-    assert "[`10:01`](https://www.bilibili.com/video/BV1vL4y157R1?t=601s)" in markdown
+    assert "### 1. 观点 [`10:01`](https://www.bilibili.com/video/BV1vL4y157R1?t=601s)" in markdown
+    assert "- **子论点**：解释 [`10:01`](https://www.bilibili.com/video/BV1vL4y157R1?t=601s)" not in markdown
+
+
+def test_render_report_markdown_uses_one_viewpoint_timestamp_and_keeps_quote_timestamps() -> None:
+    markdown = render_report_markdown(
+        question="讲了什么？",
+        metadata={"title": "Demo", "author": "Author"},
+        source_url="https://www.youtube.com/watch?v=xxxx",
+        evidence={
+            "segments": [
+                {"index": 1, "start": "00:00:05.000"},
+                {"index": 2, "start": "00:01:30.000"},
+            ]
+        },
+        outline={"viewpoint_breakdown": [{"id": "V1", "title": "观点", "evidence_segment_indexes": ["bad", 1, 2]}]},
+        details=[
+            {
+                "viewpoint_id": "V1",
+                "sub_theses": [
+                    {
+                        "title": "子论点一",
+                        "explanation": "解释一",
+                        "supporting_evidence_segment_indexes": [1],
+                        "quotes": [{"text": "引用一", "subtitle_start": "00:00:08.000"}],
+                    },
+                    {
+                        "title": "子论点二",
+                        "explanation": "解释二",
+                        "supporting_evidence_segment_indexes": [1],
+                        "quotes": [{"text": "引用二", "subtitle_start": "00:01:40.000"}],
+                    },
+                ],
+            }
+        ],
+        summary={
+            "report_title": "标题",
+            "introduction": "导读。",
+            "core_conclusions": [{"title": "结论", "rationale": "理由。"}],
+            "one_paragraph_takeaway": "总结。",
+        },
+    )
+
+    assert markdown.count("[`00:05`](https://www.youtube.com/watch?v=xxxx&t=5s)") == 1
+    assert "### 1. 观点 [`00:05`](https://www.youtube.com/watch?v=xxxx&t=5s)" in markdown
+    assert "- **子论点一**：解释一" in markdown
+    assert "- **子论点二**：解释二" in markdown
+    assert "- **子论点一**：解释一 [`00:05`](https://www.youtube.com/watch?v=xxxx&t=5s)" not in markdown
+    assert "- **子论点二**：解释二 [`00:05`](https://www.youtube.com/watch?v=xxxx&t=5s)" not in markdown
+    assert "> “引用一” [`00:08`](https://www.youtube.com/watch?v=xxxx&t=8s)" in markdown
+    assert "> “引用二” [`01:40`](https://www.youtube.com/watch?v=xxxx&t=100s)" in markdown
+
+
+def test_render_report_markdown_skips_viewpoint_timestamp_without_valid_evidence_index() -> None:
+    markdown = render_report_markdown(
+        question="讲了什么？",
+        metadata={"title": "Demo", "author": "Author"},
+        source_url="https://www.youtube.com/watch?v=xxxx",
+        evidence={"segments": [{"index": 1, "start": "00:00:05.000"}]},
+        outline={"viewpoint_breakdown": [{"id": "V1", "title": "观点", "evidence_segment_indexes": ["bad", 2]}]},
+        details=[
+            {
+                "viewpoint_id": "V1",
+                "sub_theses": [
+                    {
+                        "title": "子论点",
+                        "explanation": "解释",
+                        "supporting_evidence_segment_indexes": [1],
+                    }
+                ],
+            }
+        ],
+        summary={
+            "report_title": "标题",
+            "introduction": "导读。",
+            "core_conclusions": [{"title": "结论", "rationale": "理由。"}],
+            "one_paragraph_takeaway": "总结。",
+        },
+    )
+
+    assert "### 1. 观点" in markdown
+    assert "### 1. 观点 [`00:05`](https://www.youtube.com/watch?v=xxxx&t=5s)" not in markdown
+    assert "- **子论点**：解释 [`00:05`](https://www.youtube.com/watch?v=xxxx&t=5s)" not in markdown
 
 
 def test_render_markdown_report_writes_report_file(tmp_path: Path) -> None:
@@ -202,8 +286,12 @@ def test_render_markdown_report_writes_report_file(tmp_path: Path) -> None:
     assert markdown.startswith("# 物理AI转折点")
     assert "## 问题" not in markdown
     assert "这个视频讲了什么？" not in markdown
-    assert markdown.index("### 1. 第二个观点") < markdown.index("### 2. 第一个观点")
+    assert markdown.index("### 1. 第二个观点 [`04:10`](https://www.youtube.com/watch?v=xxxx&t=250s)") < markdown.index(
+        "### 2. 第一个观点 [`00:10`](https://www.youtube.com/watch?v=xxxx&t=10s)"
+    )
     assert "[`04:10`](https://www.youtube.com/watch?v=xxxx&t=250s)" in markdown
+    assert "- **子论点二**：解释二 [`04:10`](https://www.youtube.com/watch?v=xxxx&t=250s)" not in markdown
+    assert "- **子论点一**：解释一 [`00:10`](https://www.youtube.com/watch?v=xxxx&t=10s)" not in markdown
     assert "> “引用一” [`00:10`](https://www.youtube.com/watch?v=xxxx&t=10s)\n\n    > “引用二” [`00:50`](https://www.youtube.com/watch?v=xxxx&t=50s)" in markdown
     assert html_path.is_file()
     assert (tmp_path / "reports" / "cover.jpg").read_bytes() == b"fake jpg"

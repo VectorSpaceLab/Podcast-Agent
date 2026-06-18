@@ -164,7 +164,11 @@ def _render_viewpoint_sections(
 
         rendered_idx += 1
         title = str(viewpoint.get("title", "")).strip() or locale["viewpoint_fallback"].format(index=rendered_idx)
-        lines.extend([f"### {rendered_idx}. {title}", ""])
+        timestamp = _viewpoint_timestamp(viewpoint, segment_index_map, source_url)
+        heading = f"### {rendered_idx}. {title}"
+        if timestamp:
+            heading += f" {timestamp}"
+        lines.extend([heading, ""])
         for sub_thesis in sub_theses:
             if not isinstance(sub_thesis, dict):
                 continue
@@ -172,16 +176,9 @@ def _render_viewpoint_sections(
             if not thesis_title:
                 continue
             explanation = str(sub_thesis.get("explanation", "")).strip()
-            timestamps = _merge_sub_thesis_timestamps(
-                sub_thesis.get("supporting_evidence_segment_indexes", []),
-                segment_index_map,
-                source_url,
-            )
             bullet = f"- **{thesis_title}**"
             if explanation:
                 bullet += f"{locale['colon']}{explanation}"
-            if timestamps:
-                bullet += " " + " ".join(timestamps)
             lines.append(bullet)
             quote_lines = _render_quotes(sub_thesis.get("quotes", []), source_url)
             lines.extend(quote_lines)
@@ -305,53 +302,26 @@ def _build_segment_index_map(evidence: dict[str, Any]) -> dict[int, dict[str, An
     return index_map
 
 
-def _merge_sub_thesis_timestamps(
-    supporting_indexes: Any,
+def _viewpoint_timestamp(
+    viewpoint: dict[str, Any],
     segment_index_map: dict[int, dict[str, Any]],
     source_url: str | None,
-) -> list[str]:
-    if not isinstance(supporting_indexes, list):
-        return []
-    normalized_indexes: list[int] = []
-    for item in supporting_indexes:
+) -> str | None:
+    evidence_indexes = viewpoint.get("evidence_segment_indexes", [])
+    if not isinstance(evidence_indexes, list):
+        return None
+    for item in evidence_indexes:
         try:
             index = int(item)
         except (TypeError, ValueError):
             continue
-        if index in segment_index_map and index not in normalized_indexes:
-            normalized_indexes.append(index)
-    if not normalized_indexes:
-        return []
-
-    groups: list[list[int]] = []
-    current_group: list[int] = []
-    last_index: int | None = None
-    last_seconds: int | None = None
-    for index in normalized_indexes:
-        seconds = _time_to_seconds(str(segment_index_map.get(index, {}).get("start", "")))
-        should_merge = bool(
-            current_group
-            and (
-                (last_index is not None and index == last_index + 1)
-                or (last_seconds is not None and seconds is not None and seconds - last_seconds <= 120)
-            )
-        )
-        if not current_group or should_merge:
-            current_group.append(index)
-        else:
-            groups.append(current_group)
-            current_group = [index]
-        last_index = index
-        last_seconds = seconds
-    if current_group:
-        groups.append(current_group)
-
-    timestamps: list[str] = []
-    for group in groups:
-        timestamp = _format_timestamp_link(str(segment_index_map.get(group[0], {}).get("start", "")), source_url)
-        if timestamp and timestamp not in timestamps:
-            timestamps.append(timestamp)
-    return timestamps
+        segment = segment_index_map.get(index)
+        if not segment:
+            continue
+        timestamp = _format_timestamp_link(str(segment.get("start", "")), source_url)
+        if timestamp:
+            return timestamp
+    return None
 
 
 def _format_timestamp_link(time_str: str | None, source_url: str | None) -> str | None:

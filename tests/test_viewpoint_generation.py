@@ -107,6 +107,14 @@ def test_build_viewpoint_detail_prompt_uses_videochat_shape() -> None:
     assert "Return the viewpoint detail JSON now:" in prompt
     assert '"sub_theses"' in prompt
     assert "00:00:00.000 --> 00:00:01.000 hello" in prompt
+    assert "The quote text field is reader-facing and MUST always be written in the target report language." in prompt
+    assert "When source_text is not in the target report language, translate it faithfully into the target report language in text." in prompt
+    assert "Never copy non-target-language subtitle text into text" in prompt
+    assert "source_text MUST preserve the verbatim original subtitle evidence and MUST NOT be translated" in prompt
+    assert "If source_text is in English and the target report language is Chinese, text MUST be Chinese." in prompt
+    assert "If source_text is in Chinese and the target report language is English, text MUST be English." in prompt
+    assert "<faithful reader-facing translation/rendering in the target report language, never non-target-language source wording>" in prompt
+    assert "<verbatim original subtitle text used as evidence, unchanged and untranslated>" in prompt
 
 
 def test_generate_viewpoints_writes_details_and_payload(tmp_path: Path) -> None:

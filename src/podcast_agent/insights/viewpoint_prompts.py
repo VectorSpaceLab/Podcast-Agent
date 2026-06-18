@@ -58,8 +58,10 @@ VIEWPOINT_DETAIL_V1_WRITING_METHOD_RULES = [
 
 VIEWPOINT_DETAIL_V1_INTENT_RULES = [
     "Treat the target report language as a hard constraint for sub-thesis titles and explanations.",
-    "Write quote text in the target report language for report readers.",
-    "Preserve the verbatim original subtitle evidence in source_text.",
+    "The quote text field is reader-facing and MUST always be written in the target report language.",
+    "When source_text is not in the target report language, translate it faithfully into the target report language in text.",
+    "Never copy non-target-language subtitle text into text; non-target-language original wording belongs only in source_text.",
+    "source_text MUST preserve the verbatim original subtitle evidence and MUST NOT be translated, polished, normalized, or rewritten.",
     "Do not use the question language, subtitle language, or video language as the generated explanation language when they conflict with the target report language.",
     "If the subtitle text is already in the target report language, text may be identical to source_text.",
     "Do not change the meaning of source_text when writing text in the target report language.",
@@ -76,9 +78,12 @@ VIEWPOINT_DETAIL_V1_QUOTE_RULES = [
     "A quote may be an exact span assembled from adjacent subtitle lines when one complete speaker sentence is split across lines.",
     "If a subtitle line contains both a host question and the guest answer, quote only the exact guest sentence that supports the sub-thesis.",
     "If a strong quote depends on unclear pronouns or missing context, quote 2-3 consecutive subtitle sentences that make the reference clear.",
-    "Write text in the target report language as the reader-facing quote.",
+    "Write text as a faithful target-language translation or rendering of source_text for report readers.",
+    "If source_text is in English and the target report language is Chinese, text MUST be Chinese.",
+    "If source_text is in Chinese and the target report language is English, text MUST be English.",
+    "Do not leave text in the subtitle/source language when it differs from the target report language.",
     "Copy source_text exactly from the selected subtitle text span, preserving the original wording and order.",
-    "Do not rewrite, complete, polish, or paraphrase source_text. If the original subtitle cannot be quoted clearly, choose a different quote.",
+    "Do not rewrite, complete, polish, translate, normalize, or paraphrase source_text. If the original subtitle cannot be quoted clearly, choose a different quote.",
     "If text translates source_text, keep the translation faithful and do not add claims or emphasis absent from source_text.",
     "Do not quote host questions, prompts, or setup unless the host wording itself is necessary evidence.",
     "Avoid greetings, filler, repetition, and low-information lines unless they are necessary evidence.",
@@ -122,8 +127,8 @@ VIEWPOINT_DETAIL_V1_SCHEMA = {
             "supporting_evidence_segment_indexes": [1, 12],
             "quotes": [
                 {
-                    "text": "<reader-facing quote in the target report language that faithfully represents source_text>",
-                    "source_text": "<verbatim original subtitle text used as evidence>",
+                    "text": "<faithful reader-facing translation/rendering in the target report language, never non-target-language source wording>",
+                    "source_text": "<verbatim original subtitle text used as evidence, unchanged and untranslated>",
                     "subtitle_start": "00:02:13,000",
                     "subtitle_end": "00:02:16,000",
                 }
