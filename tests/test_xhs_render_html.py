@@ -44,8 +44,8 @@ def test_render_intro_html_includes_intro_image_when_present(tmp_path: Path) -> 
     assert 'class="kicker"' not in html
     assert ".kicker" not in html
     assert ".intro { display: flex; flex-direction: column; justify-content: center; padding-top: 54px; padding-bottom: 122px; background: #fffaf1; }" in html
-    assert ".intro-source { margin-top: 44px; padding-top: 24px; border-top: 1px solid rgba(23, 32, 28, 0.12); display: grid; gap: 10px; font-size: 22px; line-height: 1.45; color: #59625e; }" in html
-    assert ".source-row { display: grid; grid-template-columns: 72px 1fr; gap: 18px; align-items: start; }" in html
+    assert ".intro-source { margin-top: 44px; padding-top: 24px; border-top: 2px solid rgba(23, 32, 28, 0.2); display: grid; gap: 10px; font-size: 22px; line-height: 1.45; color: #59625e; }" in html
+    assert ".source-row { display: grid; grid-template-columns: 18px 1fr; gap: 10px; align-items: start; }" in html
     assert ".source-label { color: rgba(89, 98, 94, 0.72); font-weight: 700; }" in html
     assert ".source-value { color: #3f4945; word-break: break-word; }" in html
     assert ".page-footer { position: absolute; left: 108px; right: 108px; bottom: 34px; font-size: 20px; color: rgba(89, 98, 94, 0.72); text-align: center; }" in html

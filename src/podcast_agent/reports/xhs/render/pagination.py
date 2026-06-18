@@ -2,31 +2,21 @@
 
 from __future__ import annotations
 
-import math
 import re
 
-from podcast_agent.reports.xhs.render.layout import XhsMeasuredBlock, page_height
+from podcast_agent.reports.xhs.render.layout import XhsMeasuredBlock
 
 __all__ = ["paginate_measured_blocks", "split_paragraph_block"]
-
 
 def paginate_measured_blocks(
     *,
     blocks: list[XhsMeasuredBlock],
     usable_height: float,
 ) -> list[list[XhsMeasuredBlock]]:
-    """Balance pages using measured DOM heights and semantic cleanup rules."""
+    """Paginate measured blocks sequentially, splitting paragraphs at overflow."""
     if not blocks:
         return []
-    total_height = sum(block.outer_height for block in blocks)
-    page_count = max(1, math.ceil(total_height / usable_height))
-    target_height = total_height / page_count
-    pages = _initial_balanced_pages(blocks, usable_height=usable_height, target_height=target_height)
-    pages = _fix_orphan_headings(pages, usable_height=usable_height)
-    pages = _keep_quotes_with_previous_paragraph(pages, usable_height=usable_height)
-    pages = _split_paragraphs_to_fill_pages(pages, usable_height=usable_height)
-    pages = _merge_adjacent_pages_when_possible(pages, usable_height=usable_height)
-    return [page for page in pages if page]
+    return _sequential_pages(blocks, usable_height=usable_height)
 
 
 def split_paragraph_block(
@@ -35,7 +25,7 @@ def split_paragraph_block(
     available_height: float,
     min_prefix_chars: int = 10,
 ) -> tuple[XhsMeasuredBlock, XhsMeasuredBlock] | None:
-    if block.kind != "paragraph" or available_height <= 0:
+    if not _can_split_block(block) or available_height <= 0:
         return None
     text = block.text.strip()
     if len(text) < min_prefix_chars * 2:
@@ -82,114 +72,56 @@ def split_paragraph_block(
     )
 
 
-def _initial_balanced_pages(
+def _sequential_pages(
     blocks: list[XhsMeasuredBlock],
     *,
     usable_height: float,
-    target_height: float,
 ) -> list[list[XhsMeasuredBlock]]:
+    pending = list(blocks)
     pages: list[list[XhsMeasuredBlock]] = []
     current: list[XhsMeasuredBlock] = []
     current_height = 0.0
-    for block in blocks:
-        if block.outer_height > usable_height:
-            if current:
+
+    while pending:
+        block = pending.pop(0)
+        if current_height + block.outer_height <= usable_height:
+            current.append(block)
+            current_height += block.outer_height
+            continue
+
+        if current:
+            split = split_paragraph_block(block, available_height=usable_height - current_height)
+            if split is not None:
+                head, tail = split
+                current.append(head)
                 pages.append(current)
                 current = []
                 current_height = 0.0
-            pages.append([block])
-            continue
-        added_height = current_height + block.outer_height
-        if not current:
-            current = [block]
-            current_height = added_height
-            continue
-        current_distance = abs(target_height - current_height)
-        added_distance = abs(target_height - added_height)
-        if added_height <= usable_height and added_distance <= current_distance:
-            current.append(block)
-            current_height = added_height
-        else:
+                pending.insert(0, tail)
+                continue
+
             pages.append(current)
-            current = [block]
-            current_height = block.outer_height
+            current = []
+            current_height = 0.0
+            pending.insert(0, block)
+            continue
+
+        split = split_paragraph_block(block, available_height=usable_height)
+        if split is not None:
+            head, tail = split
+            pages.append([head])
+            pending.insert(0, tail)
+            continue
+
+        pages.append([block])
+
     if current:
         pages.append(current)
     return pages
 
 
-def _fix_orphan_headings(
-    pages: list[list[XhsMeasuredBlock]],
-    *,
-    usable_height: float,
-) -> list[list[XhsMeasuredBlock]]:
-    for index in range(len(pages) - 1):
-        page = pages[index]
-        next_page = pages[index + 1]
-        if len(page) <= 1 or page[-1].kind != "heading":
-            continue
-        heading = page[-1]
-        if page_height(next_page) + heading.outer_height <= usable_height:
-            page.pop()
-            next_page.insert(0, heading)
-    return [page for page in pages if page]
-
-
-def _keep_quotes_with_previous_paragraph(
-    pages: list[list[XhsMeasuredBlock]],
-    *,
-    usable_height: float,
-) -> list[list[XhsMeasuredBlock]]:
-    for index in range(1, len(pages)):
-        page = pages[index]
-        previous_page = pages[index - 1]
-        if not page or not previous_page:
-            continue
-        quote = page[0]
-        if quote.kind != "quote" or previous_page[-1].kind != "paragraph":
-            continue
-        if page_height(previous_page) + quote.outer_height <= usable_height:
-            previous_page.append(page.pop(0))
-    return [page for page in pages if page]
-
-
-def _merge_adjacent_pages_when_possible(
-    pages: list[list[XhsMeasuredBlock]],
-    *,
-    usable_height: float,
-) -> list[list[XhsMeasuredBlock]]:
-    merged: list[list[XhsMeasuredBlock]] = []
-    index = 0
-    while index < len(pages):
-        current = list(pages[index])
-        while index + 1 < len(pages) and page_height(current) + page_height(pages[index + 1]) <= usable_height:
-            current.extend(pages[index + 1])
-            index += 1
-        merged.append(current)
-        index += 1
-    return [page for page in merged if page]
-
-
-def _split_paragraphs_to_fill_pages(
-    pages: list[list[XhsMeasuredBlock]],
-    *,
-    usable_height: float,
-) -> list[list[XhsMeasuredBlock]]:
-    for index in range(len(pages) - 1):
-        page = pages[index]
-        next_page = pages[index + 1]
-        if not page or not next_page:
-            continue
-        next_block = next_page[0]
-        remaining_height = usable_height - page_height(page)
-        if next_block.kind != "paragraph" or remaining_height < usable_height * 0.18:
-            continue
-        split = split_paragraph_block(next_block, available_height=remaining_height)
-        if split is not None:
-            head, tail = split
-            page.append(head)
-            next_page[0] = tail
-    return [page for page in pages if page]
+def _can_split_block(block: XhsMeasuredBlock) -> bool:
+    return block.kind == "paragraph" and not block.continuation and block.split_from is None
 
 
 def _largest_prefix_for_height(text: str, *, available_height: float, full_height: float) -> str:
