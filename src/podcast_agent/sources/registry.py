@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from podcast_agent.errors import UnsupportedSourceError
 from podcast_agent.sources.base import SourceClient
+from podcast_agent.sources.bilibili import BilibiliSourceClient
 from podcast_agent.sources.detection import detect_source
 from podcast_agent.sources.youtube import YoutubeSourceClient
 from podcast_agent.types import SourceRef
 
 _SOURCE_CLIENTS: dict[str, SourceClient] = {
+    "bilibili": BilibiliSourceClient(),
     "youtube": YoutubeSourceClient(),
 }
 
