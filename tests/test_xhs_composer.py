@@ -79,6 +79,10 @@ def test_compose_xhs_report_writes_note_and_post_meta(tmp_path: Path) -> None:
     assert post_meta["source_url"] == "https://www.youtube.com/watch?v=xxxx"
     assert post_meta["tags"] == ["AI", "科技", "商业", "创业", "播客"]
     assert note.startswith("---\n")
+    assert 'author: "Example Host"' in note
+    assert 'source_title: "Example Podcast"' in note
+    assert 'url: "https://www.youtube.com/watch?v=xxxx"' in note
+    assert 'source: "Example Host / Example Podcast"' in note
     assert 'intro_image: "./cover.png"' in note
     assert "\n---\n\n## 1. AI 的战场变了" in note
     assert "> 真正难的是闭环。" in note
@@ -106,6 +110,9 @@ def test_render_xhs_note_markdown_escapes_frontmatter_quotes() -> None:
     )
 
     assert 'title: "他说\\"物理AI\\""' in markdown
+    assert 'author: "Host"' in markdown
+    assert 'source_title: "Source \\"Title\\""' in markdown
+    assert 'url: "https://example.com"' in markdown
     assert 'source: "Host / Source \\"Title\\""' in markdown
 
 

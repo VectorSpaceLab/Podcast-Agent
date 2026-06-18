@@ -71,12 +71,13 @@ def render_xhs_note_markdown(*, composition: dict[str, Any], metadata: dict[str,
     """Render validated XHS composition JSON into note.md."""
     source = str(metadata.get("author") or metadata.get("uploader") or "").strip()
     source_title = str(metadata.get("title") or "").strip()
-    source_label = " / ".join(part for part in [source, source_title] if part)
     frontmatter = [
         "---",
         f'title: "{_escape_yaml_string(composition["article_title"])}"',
-        f'source: "{_escape_yaml_string(source_label)}"',
+        f'author: "{_escape_yaml_string(source)}"',
+        f'source_title: "{_escape_yaml_string(source_title)}"',
         f'url: "{_escape_yaml_string(_source_url(metadata))}"',
+        f'source: "{_escape_yaml_string(" / ".join(part for part in [source, source_title] if part))}"',
         'intro_image: "./cover.png"',
         "---",
         "",
