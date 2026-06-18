@@ -385,7 +385,11 @@ def _url_with_timestamp(source_url: str, seconds: int) -> str:
     parsed = urlparse(source_url)
     query = parse_qs(parsed.query, keep_blank_values=True)
     query["t"] = [f"{seconds}s"]
-    return urlunparse(parsed._replace(query=urlencode(query, doseq=True)))
+    path = parsed.path
+    host = (parsed.hostname or "").lower()
+    if (host == "bilibili.com" or host.endswith(".bilibili.com")) and path.startswith("/video/"):
+        path = path.rstrip("/")
+    return urlunparse(parsed._replace(path=path, query=urlencode(query, doseq=True)))
 
 
 def _format_duration(value: Any) -> str:

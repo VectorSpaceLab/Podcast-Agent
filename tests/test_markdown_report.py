@@ -160,6 +160,36 @@ def test_render_report_markdown_uses_english_locale_for_english_intent() -> None
     assert "- Author: Author" in markdown
 
 
+def test_render_report_markdown_normalizes_bilibili_trailing_slash_timestamp_url() -> None:
+    markdown = render_report_markdown(
+        question="讲了什么？",
+        metadata={"title": "Demo", "author": "Author"},
+        source_url="https://www.bilibili.com/video/BV1vL4y157R1/",
+        evidence={"segments": [{"index": 1, "start": "00:10:01.000"}]},
+        outline={"viewpoint_breakdown": [{"id": "V1", "title": "观点"}]},
+        details=[
+            {
+                "viewpoint_id": "V1",
+                "sub_theses": [
+                    {
+                        "title": "子论点",
+                        "explanation": "解释",
+                        "supporting_evidence_segment_indexes": [1],
+                    }
+                ],
+            }
+        ],
+        summary={
+            "report_title": "标题",
+            "introduction": "导读。",
+            "core_conclusions": [{"title": "结论", "rationale": "理由。"}],
+            "one_paragraph_takeaway": "总结。",
+        },
+    )
+
+    assert "[`10:01`](https://www.bilibili.com/video/BV1vL4y157R1?t=601s)" in markdown
+
+
 def test_render_markdown_report_writes_report_file(tmp_path: Path) -> None:
     _write_report_inputs(tmp_path)
 
