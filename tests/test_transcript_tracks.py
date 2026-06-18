@@ -2,6 +2,7 @@ from podcast_agent.elements.transcript_tracks import (
     TranscriptLanguagePreference,
     rank_transcript_tracks,
     transcript_tracks_from_info,
+    transcript_tracks_from_info_for_source,
 )
 from podcast_agent.types import TranscriptTrack
 
@@ -48,3 +49,36 @@ def test_rank_transcript_tracks_prefers_manual_without_language_match() -> None:
     )
 
     assert ranked[0].id == "en"
+
+
+def test_bilibili_transcript_tracks_filter_danmaku_xml() -> None:
+    tracks = transcript_tracks_from_info_for_source(
+        {
+            "subtitles": {
+                "danmaku": [{"ext": "xml"}],
+                "zh-Hans": [{"ext": "json"}],
+            },
+            "automatic_captions": {
+                "ai-zh": [{"ext": "json"}],
+            },
+        },
+        source_type="bilibili",
+    )
+
+    assert [track.id for track in tracks] == ["zh-Hans", "ai-zh"]
+
+
+def test_rank_transcript_tracks_treats_bilibili_ai_language_as_natural_language() -> None:
+    tracks = [
+        TranscriptTrack(id="ai-ar", language="ai-ar", track_kind="automatic"),
+        TranscriptTrack(id="ai-en", language="ai-en", track_kind="automatic"),
+        TranscriptTrack(id="ai-ja", language="ai-ja", track_kind="automatic"),
+        TranscriptTrack(id="ai-zh", language="ai-zh", track_kind="automatic"),
+    ]
+
+    ranked = rank_transcript_tracks(
+        tracks,
+        TranscriptLanguagePreference(preferred_languages=("zh-Hans",)),
+    )
+
+    assert [track.id for track in ranked] == ["ai-zh", "ai-ar", "ai-en", "ai-ja"]

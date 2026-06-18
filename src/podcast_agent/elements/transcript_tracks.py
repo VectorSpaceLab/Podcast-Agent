@@ -30,12 +30,22 @@ class TranscriptLanguagePreference:
 
 
 def transcript_tracks_from_info(info: dict[str, Any]) -> list[TranscriptTrack]:
+    return transcript_tracks_from_info_for_source(info, source_type=None)
+
+
+def transcript_tracks_from_info_for_source(
+    info: dict[str, Any],
+    *,
+    source_type: str | None,
+) -> list[TranscriptTrack]:
     tracks: list[TranscriptTrack] = []
     for collection_key, kind in (("subtitles", "manual"), ("automatic_captions", "automatic")):
         collection = info.get(collection_key)
         if not isinstance(collection, dict):
             continue
         for language, subtitles in collection.items():
+            if source_type == "bilibili" and _is_bilibili_danmaku_track(language, subtitles):
+                continue
             if isinstance(subtitles, list) and not subtitles:
                 continue
             tracks.append(
@@ -114,4 +124,19 @@ def _language_variant_rank(language: str, preferred_language: str | None) -> int
 def _is_language_match(language: str, preferred_language: str | None) -> bool:
     if not preferred_language:
         return False
-    return language.strip()[:2] == preferred_language.strip()[:2]
+    return _normalize_language_code(language)[:2] == _normalize_language_code(preferred_language)[:2]
+
+
+def _normalize_language_code(language: str) -> str:
+    normalized = language.strip()
+    if normalized.startswith("ai-") and len(normalized) > 3:
+        return normalized[3:]
+    return normalized
+
+
+def _is_bilibili_danmaku_track(language: Any, subtitles: Any) -> bool:
+    if str(language).strip() == "danmaku":
+        return True
+    if not isinstance(subtitles, list):
+        return False
+    return any(isinstance(item, dict) and str(item.get("ext") or "").lower() == "xml" for item in subtitles)

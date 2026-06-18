@@ -5,8 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Protocol
 
-from podcast_agent.config import YOUTUBE_COOKIES_FILE
-from podcast_agent.downloaders.yt_dlp import YtDlpDownloader
+from podcast_agent.config import BILIBILI_COOKIES_FILE, BILIBILI_USER_AGENT, YOUTUBE_COOKIES_FILE
+from podcast_agent.downloaders.yt_dlp import BilibiliYtDlpDownloader, YtDlpDownloader
 from podcast_agent.elements.transcript_format import (
     count_vtt_cues,
     require_non_empty_vtt,
@@ -17,7 +17,7 @@ from podcast_agent.elements.transcript_format import (
 from podcast_agent.elements.transcript_tracks import (
     TranscriptLanguagePreference,
     rank_transcript_tracks,
-    transcript_tracks_from_info,
+    transcript_tracks_from_info_for_source,
 )
 from podcast_agent.errors import AudioTranscriptionError, TranscriptFetchError
 from podcast_agent.pipeline.artifacts import save_json
@@ -57,7 +57,8 @@ class YoutubeTranscriptFetcher:
         self.elements_dir = elements_dir
         self.raw_dir = elements_dir / "raw"
         self.audio_dir = elements_dir / "audio"
-        self.downloader = downloader or YtDlpDownloader(cookies_file=cookies_file or YOUTUBE_COOKIES_FILE)
+        self.downloader = downloader
+        self.cookies_file = cookies_file
         self.transcriber = transcriber
         self.language_preference = language_preference or TranscriptLanguagePreference()
 
@@ -71,10 +72,14 @@ class YoutubeTranscriptFetcher:
             return self._fetch_from_audio_transcription(source)
 
     def _fetch_from_youtube_subtitles(self, source: SourceRef) -> TranscriptInfo:
-        info = self.downloader.extract_info(source.url, output_dir=self.raw_dir)
-        tracks = rank_transcript_tracks(transcript_tracks_from_info(info), self.language_preference)
+        downloader = self.downloader or _default_transcript_downloader(source, self.cookies_file)
+        info = downloader.extract_info(source.url, output_dir=self.raw_dir)
+        tracks = rank_transcript_tracks(
+            transcript_tracks_from_info_for_source(info, source_type=source.source_type),
+            self.language_preference,
+        )
         if not tracks:
-            raise TranscriptFetchError(f"Transcript fetch failed: no YouTube subtitles are available for {source.source_id}")
+            raise TranscriptFetchError(f"Transcript fetch failed: no subtitles are available for {source.source_id}")
 
         last_error: Exception | None = None
         for track in tracks[: self.language_preference.max_download_attempts]:
@@ -85,8 +90,8 @@ class YoutubeTranscriptFetcher:
                     source=source,
                     vtt_content=vtt_content,
                     language=track.language,
-                    acquisition_method="youtube_subtitle",
-                    subtitle_source="youtube_captions",
+                    acquisition_method=f"{source.source_type}_subtitle",
+                    subtitle_source=f"{source.source_type}_yt_dlp_captions",
                     subtitle_kind=track.track_kind,
                     subtitle_track_id=track.id,
                     source_format=downloaded_path.suffix.lower().lstrip("."),
@@ -98,10 +103,11 @@ class YoutubeTranscriptFetcher:
                 last_error = exc
                 continue
 
-        raise TranscriptFetchError(f"Transcript fetch failed: failed to download YouTube subtitles: {last_error}")
+        raise TranscriptFetchError(f"Transcript fetch failed: failed to download subtitles: {last_error}")
 
     def _download_track(self, source: SourceRef, track: TranscriptTrack) -> Path:
-        info = self.downloader.download_subtitle(
+        downloader = self.downloader or _default_transcript_downloader(source, self.cookies_file)
+        info = downloader.download_subtitle(
             source.url,
             output_dir=self.raw_dir,
             language=track.language,
@@ -132,7 +138,8 @@ class YoutubeTranscriptFetcher:
         if self.transcriber is None:
             raise TranscriptFetchError("Transcript fetch failed: audio transcription fallback is not configured")
 
-        audio_info = self.downloader.download_audio(source.url, output_dir=self.audio_dir)
+        downloader = self.downloader or _default_transcript_downloader(source, self.cookies_file)
+        audio_info = downloader.download_audio(source.url, output_dir=self.audio_dir)
         audio_path = _requested_audio_path(audio_info, self.audio_dir)
         if audio_path is None:
             raise AudioTranscriptionError("Audio transcription failed: downloaded audio file not found")
@@ -283,6 +290,15 @@ def _elements_relative_path(path: Path | None, elements_dir: Path) -> str | None
         return f"elements/{path.relative_to(elements_dir).as_posix()}"
     except ValueError:
         return str(path)
+
+
+def _default_transcript_downloader(source: SourceRef, cookies_file: str | None) -> TranscriptDownloader:
+    if source.source_type == "bilibili":
+        return BilibiliYtDlpDownloader(
+            cookies_file=BILIBILI_COOKIES_FILE,
+            user_agent=BILIBILI_USER_AGENT,
+        )
+    return YtDlpDownloader(cookies_file=cookies_file or YOUTUBE_COOKIES_FILE)
 
 
 def _duration_seconds(value: Any) -> float | None:

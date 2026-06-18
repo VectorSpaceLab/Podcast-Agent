@@ -20,6 +20,7 @@ def test_youtube_transcript_fetcher_writes_vtt_text_and_info(tmp_path: Path) -> 
     ).fetch(SOURCE)
 
     assert info.acquisition_method == "youtube_subtitle"
+    assert info.subtitle_source == "youtube_yt_dlp_captions"
     assert info.language == "zh-Hans"
     assert info.subtitle_kind == "manual"
     assert (tmp_path / "transcript.vtt").read_text(encoding="utf-8").startswith("WEBVTT")
@@ -53,3 +54,30 @@ def test_youtube_transcript_fetcher_falls_back_to_audio_transcription(tmp_path: 
     assert (tmp_path / "audio_info.json").is_file()
     assert (tmp_path / "transcript.txt").read_text(encoding="utf-8") == "转录第一句。\n转录第二句。\n"
     assert transcriber.calls
+
+
+def test_bilibili_transcript_fetcher_filters_danmaku_and_uses_ai_caption(tmp_path: Path) -> None:
+    source = SourceRef(
+        source_type="bilibili",
+        url="https://www.bilibili.com/video/BV1xx411c7mD",
+        source_id="BV1xx411c7mD",
+    )
+    downloader = FakeTranscriptDownloader(
+        info={
+            "subtitles": {"danmaku": [{"ext": "xml"}]},
+            "automatic_captions": {
+                "ai-en": [{"ext": "json"}],
+                "ai-zh": [{"ext": "json"}],
+            },
+        }
+    )
+
+    info = YoutubeTranscriptFetcher(
+        elements_dir=tmp_path,
+        downloader=downloader,
+    ).fetch(source)
+
+    assert info.acquisition_method == "bilibili_subtitle"
+    assert info.subtitle_source == "bilibili_yt_dlp_captions"
+    assert info.language == "ai-zh"
+    assert downloader.subtitle_calls[0][2] == "ai-zh"

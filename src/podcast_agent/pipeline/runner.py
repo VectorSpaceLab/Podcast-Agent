@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from podcast_agent.config import YOUTUBE_COOKIES_FILE
 from podcast_agent.elements.youtube_metadata import MetadataDownloader, YoutubeMetadataFetcher
 from podcast_agent.elements.youtube_transcript import (
     TranscriptDownloader,
@@ -36,13 +35,11 @@ def run_pipeline(
     save_json(context.source_path, source_ref)
     metadata = YoutubeMetadataFetcher(
         output_dir=context.elements_dir,
-        cookies_file=YOUTUBE_COOKIES_FILE,
         downloader=metadata_downloader,
     ).fetch(source_ref)
     save_json(context.elements_dir / "metadata.json", metadata)
     YoutubeTranscriptFetcher(
         elements_dir=context.elements_dir,
-        cookies_file=YOUTUBE_COOKIES_FILE,
         downloader=transcript_downloader,
         transcriber=audio_transcriber,
     ).fetch(source_ref)
