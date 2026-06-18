@@ -7,11 +7,11 @@
 <p align="center">
   <img alt="Python" src="https://img.shields.io/badge/Python-3.10%2B-blue">
   <img alt="CLI" src="https://img.shields.io/badge/Interface-CLI-green">
-  <img alt="Input" src="https://img.shields.io/badge/Input-YouTube-red">
+  <img alt="Input" src="https://img.shields.io/badge/Input-YouTube%20%7C%20Bilibili-red">
   <img alt="Output" src="https://img.shields.io/badge/Output-Markdown-black">
 </p>
 
-Podcast-Agent 可以将 YouTube 播客和长视频转换为结构化报告，帮助用户更快理解和分析内容。
+Podcast-Agent 可以将 YouTube 和 Bilibili 播客或长视频转换为结构化报告，帮助用户更快理解和分析内容。
 
 [Homepage](https://vectorspacelab.github.io/Podcast-Agent/) | [概览](#概览) | [架构](#架构) | [项目结构](#项目结构) | [安装](#安装) | [快速开始](#快速开始) | [CLI-使用](#cli-使用)
 
@@ -23,7 +23,7 @@ Podcast-Agent 适用于：
 - 生成 Markdown、PDF、小红书图片等多种格式报告。
 - 保存中间产物，便于检查、调试或后续处理。
 
-当前输入主要支持 YouTube 视频。
+当前输入支持 YouTube 和 Bilibili 视频。
 
 ## 架构
 
@@ -61,7 +61,7 @@ src/podcast_agent/
 - Python 3.10+
 - `ffmpeg`
 - Playwright Chromium
-- 可访问 YouTube、DeepSeek、阿里云 DashScope ASR 和阿里云 OSS
+- 可访问 YouTube、Bilibili、DeepSeek、阿里云 DashScope ASR 和阿里云 OSS
 - 字体已内置，无需额外安装
 
 常见系统依赖安装：
@@ -115,6 +115,9 @@ DEEPSEEK_MODEL=deepseek-chat
 
 YOUTUBE_COOKIES_FILE=
 
+BILIBILI_COOKIES_FILE=
+BILIBILI_USER_AGENT=
+
 ALIYUN_API_KEY=
 OSS_ENDPOINT=
 OSS_BUCKET_NAME=
@@ -165,7 +168,34 @@ YOUTUBE_COOKIES_FILE=/absolute/path/to/Podcast-Agent/cookies.txt
 - cookies 文件包含登录凭据，不要提交到 Git，也不要分享给他人。
 - 如果 cookies 过期，需要重新导出。
 
-#### 3.3 阿里云转录
+#### 3.3 Bilibili Cookies
+
+1. 在浏览器中安装扩展 `Get cookies.txt LOCALLY`。
+2. 登录 Bilibili 账号。
+3. 打开 Bilibili 页面，点击扩展导出 `cookies.txt`。
+4. 将导出的文件放到项目根目录，例如：
+
+```text
+Podcast-Agent/
+├── bilibili-cookies.txt
+├── README.md
+└── src/
+```
+
+5. 在 `.env` 中填写 Bilibili 配置：
+
+```env
+BILIBILI_COOKIES_FILE=./bilibili-cookies.txt
+BILIBILI_USER_AGENT=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125 Safari/537.36
+```
+
+如果从其他工作目录启动命令，使用绝对路径：
+
+```env
+BILIBILI_COOKIES_FILE=/absolute/path/to/Podcast-Agent/bilibili-cookies.txt
+```
+
+#### 3.4 阿里云转录
 
 准备阿里云 DashScope API Key 和 OSS Bucket 配置。
 
@@ -222,6 +252,15 @@ output/<case-id>/reports/xhs/images/
   --url "https://www.youtube.com/watch?v=<video-id>" \
   --question "这个视频讲了什么？" \
   --output-dir output/my-report
+```
+
+Bilibili 链接也可以使用同一个命令：
+
+```bash
+.venv/bin/podcast-agent full \
+  --url "https://www.bilibili.com/video/<BV-id>" \
+  --question "这个视频讲了什么？" \
+  --output-dir output/my-bilibili-report
 ```
 
 完整命令参考：[CLI 使用指南](usage-docs/cli.md)。

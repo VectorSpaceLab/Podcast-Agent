@@ -7,11 +7,11 @@
 <p align="center">
   <img alt="Python" src="https://img.shields.io/badge/Python-3.10%2B-blue">
   <img alt="CLI" src="https://img.shields.io/badge/Interface-CLI-green">
-  <img alt="Input" src="https://img.shields.io/badge/Input-YouTube-red">
+  <img alt="Input" src="https://img.shields.io/badge/Input-YouTube%20%7C%20Bilibili-red">
   <img alt="Output" src="https://img.shields.io/badge/Output-Markdown-black">
 </p>
 
-Podcast-Agent turns YouTube podcasts and long-form videos into structured reports for faster understanding and analysis.
+Podcast-Agent turns YouTube and Bilibili podcasts or long-form videos into structured reports for faster understanding and analysis.
 
 [Homepage](https://vectorspacelab.github.io/Podcast-Agent/) | [Overview](#overview) | [Architecture](#architecture) | [Project Structure](#project-structure) | [Installation](#installation) | [Quick Start](#quick-start) | [CLI Usage](#cli-usage)
 
@@ -24,7 +24,7 @@ Podcast-Agent is useful when you want to:
 - Generate shareable reports in multiple formats for easier distribution.
 - Save intermediate artifacts for review, debugging, or downstream analysis.
 
-Current input support is centered on YouTube videos.
+Current input support includes YouTube and Bilibili videos.
 
 ## Architecture
 
@@ -62,7 +62,7 @@ src/podcast_agent/
 - Python 3.10+
 - `ffmpeg`
 - Playwright Chromium
-- Network access to YouTube, DeepSeek, Aliyun DashScope ASR, and Aliyun OSS
+- Network access to YouTube, Bilibili, DeepSeek, Aliyun DashScope ASR, and Aliyun OSS
 - Fonts are bundled; no extra font installation is required
 
 Common system dependency installation:
@@ -116,6 +116,9 @@ DEEPSEEK_MODEL=deepseek-chat
 
 YOUTUBE_COOKIES_FILE=
 
+BILIBILI_COOKIES_FILE=
+BILIBILI_USER_AGENT=
+
 ALIYUN_API_KEY=
 OSS_ENDPOINT=
 OSS_BUCKET_NAME=
@@ -166,7 +169,34 @@ Notes:
 - The cookies file contains login credentials. Do not commit it or share it.
 - If the cookies expire, export the file again.
 
-#### 3.3 Aliyun Transcription
+#### 3.3 Bilibili Cookies
+
+1. Install the browser extension `Get cookies.txt LOCALLY`.
+2. Log in to your Bilibili account.
+3. Open Bilibili and export `cookies.txt` with the extension.
+4. Place the exported file in the project root, for example:
+
+```text
+Podcast-Agent/
+├── bilibili-cookies.txt
+├── README.md
+└── src/
+```
+
+5. Set the Bilibili options in `.env`:
+
+```env
+BILIBILI_COOKIES_FILE=./bilibili-cookies.txt
+BILIBILI_USER_AGENT=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125 Safari/537.36
+```
+
+If commands are run from another working directory, use an absolute path:
+
+```env
+BILIBILI_COOKIES_FILE=/absolute/path/to/Podcast-Agent/bilibili-cookies.txt
+```
+
+#### 3.4 Aliyun Transcription
 
 Prepare an Aliyun DashScope API key and OSS bucket configuration.
 
@@ -223,6 +253,15 @@ Run the full pipeline from the command line:
   --url "https://www.youtube.com/watch?v=<video-id>" \
   --question "Your question about the video" \
   --output-dir output/my-report
+```
+
+Bilibili URLs are supported in the same command:
+
+```bash
+.venv/bin/podcast-agent full \
+  --url "https://www.bilibili.com/video/<BV-id>" \
+  --question "Your question about the video" \
+  --output-dir output/my-bilibili-report
 ```
 
 For a complete command reference, see [CLI Usage Guide](usage-docs/cli.md).
