@@ -18,6 +18,9 @@ def test_build_base_yt_dlp_options_contains_common_options() -> None:
     assert options["remote_components"] == ["ejs:github"]
     assert options["quiet"] is True
     assert options["no_warnings"] is True
+    assert options["socket_timeout"] == 60
+    assert options["retries"] == 5
+    assert options["extractor_retries"] == 5
 
 
 def test_build_base_yt_dlp_options_adds_cookiefile() -> None:
@@ -72,10 +75,12 @@ def test_build_bilibili_metadata_options_uses_cookie_referer_and_user_agent(tmp_
     options = build_bilibili_metadata_yt_dlp_options(
         output_dir=tmp_path,
         cookies_file="/tmp/bilibili-cookies.txt",
+        cookies_from_browser="chrome",
         user_agent="Custom UA",
     )
 
     assert options["cookiefile"] == "/tmp/bilibili-cookies.txt"
+    assert options["cookiesfrombrowser"] == ("chrome",)
     assert options["http_headers"]["Referer"] == "https://www.bilibili.com/"
     assert options["http_headers"]["User-Agent"] == "Custom UA"
     assert options["listsubtitles"] is True

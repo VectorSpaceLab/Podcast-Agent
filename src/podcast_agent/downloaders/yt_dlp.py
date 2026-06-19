@@ -22,6 +22,9 @@ def build_base_yt_dlp_options(*, cookies_file: str | None = None) -> dict[str, A
         "remote_components": ["ejs:github"],
         "quiet": True,
         "no_warnings": True,
+        "socket_timeout": 60,
+        "retries": 5,
+        "extractor_retries": 5,
     }
     if cookies_file:
         options["cookiefile"] = cookies_file
@@ -31,6 +34,7 @@ def build_base_yt_dlp_options(*, cookies_file: str | None = None) -> dict[str, A
 def build_bilibili_base_yt_dlp_options(
     *,
     cookies_file: str | None = None,
+    cookies_from_browser: str | None = None,
     user_agent: str | None = None,
 ) -> dict[str, Any]:
     options = build_base_yt_dlp_options(cookies_file=cookies_file)
@@ -42,6 +46,8 @@ def build_bilibili_base_yt_dlp_options(
             "Chrome/125 Safari/537.36"
         ),
     }
+    if cookies_from_browser:
+        options["cookiesfrombrowser"] = (cookies_from_browser,)
     return options
 
 
@@ -49,10 +55,15 @@ def build_bilibili_metadata_yt_dlp_options(
     *,
     output_dir: Path,
     cookies_file: str | None = None,
+    cookies_from_browser: str | None = None,
     user_agent: str | None = None,
 ) -> dict[str, Any]:
     return {
-        **build_bilibili_base_yt_dlp_options(cookies_file=cookies_file, user_agent=user_agent),
+        **build_bilibili_base_yt_dlp_options(
+            cookies_file=cookies_file,
+            cookies_from_browser=cookies_from_browser,
+            user_agent=user_agent,
+        ),
         "skip_download": True,
         "listsubtitles": True,
         "writethumbnail": True,
@@ -74,10 +85,15 @@ def build_bilibili_subtitle_download_yt_dlp_options(
     language: str,
     track_kind: str,
     cookies_file: str | None = None,
+    cookies_from_browser: str | None = None,
     user_agent: str | None = None,
 ) -> dict[str, Any]:
     return {
-        **build_bilibili_base_yt_dlp_options(cookies_file=cookies_file, user_agent=user_agent),
+        **build_bilibili_base_yt_dlp_options(
+            cookies_file=cookies_file,
+            cookies_from_browser=cookies_from_browser,
+            user_agent=user_agent,
+        ),
         "skip_download": True,
         "format": None,
         "writesubtitles": track_kind == "manual",
@@ -95,10 +111,15 @@ def build_bilibili_audio_download_yt_dlp_options(
     *,
     output_dir: Path,
     cookies_file: str | None = None,
+    cookies_from_browser: str | None = None,
     user_agent: str | None = None,
 ) -> dict[str, Any]:
     return {
-        **build_bilibili_base_yt_dlp_options(cookies_file=cookies_file, user_agent=user_agent),
+        **build_bilibili_base_yt_dlp_options(
+            cookies_file=cookies_file,
+            cookies_from_browser=cookies_from_browser,
+            user_agent=user_agent,
+        ),
         "format": "worstaudio",
         "extractaudio": True,
         "audioformat": "wav",
@@ -243,14 +264,22 @@ class YtDlpDownloader:
 
 
 class BilibiliYtDlpDownloader(YtDlpDownloader):
-    def __init__(self, *, cookies_file: str | None = None, user_agent: str | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        cookies_file: str | None = None,
+        cookies_from_browser: str | None = None,
+        user_agent: str | None = None,
+    ) -> None:
         super().__init__(cookies_file=cookies_file)
+        self.cookies_from_browser = cookies_from_browser
         self.user_agent = user_agent
 
     def extract_info(self, url: str, *, output_dir: Path) -> dict[str, Any]:
         options = build_bilibili_metadata_yt_dlp_options(
             output_dir=output_dir,
             cookies_file=self.cookies_file,
+            cookies_from_browser=self.cookies_from_browser,
             user_agent=self.user_agent,
         )
         info = self._extract(url=url, output_dir=output_dir, options=options, download=True)
@@ -274,6 +303,7 @@ class BilibiliYtDlpDownloader(YtDlpDownloader):
             language=language,
             track_kind=track_kind,
             cookies_file=self.cookies_file,
+            cookies_from_browser=self.cookies_from_browser,
             user_agent=self.user_agent,
         )
         return self._extract(url=url, output_dir=output_dir, options=options, download=True)
@@ -282,6 +312,7 @@ class BilibiliYtDlpDownloader(YtDlpDownloader):
         options = build_bilibili_audio_download_yt_dlp_options(
             output_dir=output_dir,
             cookies_file=self.cookies_file,
+            cookies_from_browser=self.cookies_from_browser,
             user_agent=self.user_agent,
         )
         return self._extract(url=url, output_dir=output_dir, options=options, download=True)

@@ -6,7 +6,12 @@ import logging
 from pathlib import Path
 from typing import Any, Protocol
 
-from podcast_agent.config import BILIBILI_COOKIES_FILE, BILIBILI_USER_AGENT, YOUTUBE_COOKIES_FILE
+from podcast_agent.config import (
+    BILIBILI_COOKIES_FILE,
+    BILIBILI_COOKIES_FROM_BROWSER,
+    BILIBILI_USER_AGENT,
+    YOUTUBE_COOKIES_FILE,
+)
 from podcast_agent.downloaders.yt_dlp import BilibiliYtDlpDownloader, YtDlpDownloader
 from podcast_agent.elements.transcript_format import (
     count_vtt_cues,
@@ -360,7 +365,8 @@ def _elements_relative_path(path: Path | None, elements_dir: Path) -> str | None
 def _default_transcript_downloader(source: SourceRef, cookies_file: str | None) -> TranscriptDownloader:
     if source.source_type == "bilibili":
         return BilibiliYtDlpDownloader(
-            cookies_file=BILIBILI_COOKIES_FILE,
+            cookies_file=cookies_file or BILIBILI_COOKIES_FILE,
+            cookies_from_browser=BILIBILI_COOKIES_FROM_BROWSER,
             user_agent=BILIBILI_USER_AGENT,
         )
     return YtDlpDownloader(cookies_file=cookies_file or YOUTUBE_COOKIES_FILE)

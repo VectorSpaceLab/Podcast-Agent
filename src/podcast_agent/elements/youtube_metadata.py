@@ -5,7 +5,12 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Protocol
 
-from podcast_agent.config import BILIBILI_COOKIES_FILE, BILIBILI_USER_AGENT, YOUTUBE_COOKIES_FILE
+from podcast_agent.config import (
+    BILIBILI_COOKIES_FILE,
+    BILIBILI_COOKIES_FROM_BROWSER,
+    BILIBILI_USER_AGENT,
+    YOUTUBE_COOKIES_FILE,
+)
 from podcast_agent.downloaders.yt_dlp import BilibiliYtDlpDownloader, YtDlpDownloader
 from podcast_agent.errors import MetadataFetchError, YtDlpError
 from podcast_agent.elements.metadata import normalize_metadata
@@ -45,7 +50,8 @@ class YoutubeMetadataFetcher:
 def _default_metadata_downloader(source: SourceRef, cookies_file: str | None) -> MetadataDownloader:
     if source.source_type == "bilibili":
         return BilibiliYtDlpDownloader(
-            cookies_file=BILIBILI_COOKIES_FILE,
+            cookies_file=cookies_file or BILIBILI_COOKIES_FILE,
+            cookies_from_browser=BILIBILI_COOKIES_FROM_BROWSER,
             user_agent=BILIBILI_USER_AGENT,
         )
     return YtDlpDownloader(cookies_file=cookies_file or YOUTUBE_COOKIES_FILE)
