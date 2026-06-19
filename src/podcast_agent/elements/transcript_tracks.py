@@ -74,6 +74,21 @@ def rank_transcript_tracks(
     return sorted(available, key=lambda track: _track_sort_key(track, preference))
 
 
+def transcript_download_candidates(
+    tracks: list[TranscriptTrack],
+    preference: TranscriptLanguagePreference | None = None,
+) -> list[TranscriptTrack]:
+    preference = preference or TranscriptLanguagePreference()
+    preferred_language = preference.preferred_languages[0] if preference.preferred_languages else None
+    if not preferred_language:
+        return tracks
+    return [
+        track
+        for track in tracks
+        if _is_language_match(track.language, preferred_language) or track.track_kind != "automatic"
+    ]
+
+
 def _track_sort_key(
     track: TranscriptTrack,
     preference: TranscriptLanguagePreference,

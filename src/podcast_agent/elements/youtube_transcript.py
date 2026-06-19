@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -17,6 +18,7 @@ from podcast_agent.elements.transcript_format import (
 from podcast_agent.elements.transcript_tracks import (
     TranscriptLanguagePreference,
     rank_transcript_tracks,
+    transcript_download_candidates,
     transcript_tracks_from_info_for_source,
 )
 from podcast_agent.errors import AudioTranscriptionError, TranscriptFetchError
@@ -24,6 +26,9 @@ from podcast_agent.pipeline.artifacts import save_json
 from podcast_agent.transcribers.base import Transcriber
 from podcast_agent.transcribers.types import TranscriptionRequest
 from podcast_agent.types import AudioInfo, SourceRef, TranscriptInfo, TranscriptTrack
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 class TranscriptDownloader(Protocol):
@@ -74,15 +79,58 @@ class YoutubeTranscriptFetcher:
     def _fetch_from_youtube_subtitles(self, source: SourceRef) -> TranscriptInfo:
         downloader = self.downloader or _default_transcript_downloader(source, self.cookies_file)
         info = downloader.extract_info(source.url, output_dir=self.raw_dir)
-        tracks = rank_transcript_tracks(
+        ranked_tracks = rank_transcript_tracks(
             transcript_tracks_from_info_for_source(info, source_type=source.source_type),
             self.language_preference,
         )
-        if not tracks:
+        preferred_language = self._preferred_language()
+        LOGGER.info(
+            "youtube_transcript_tracks_listed | source_id=%s | source_type=%s | track_count=%s | preferred_language=%s",
+            source.source_id,
+            source.source_type,
+            len(ranked_tracks),
+            preferred_language or "",
+        )
+        if not ranked_tracks:
+            LOGGER.info(
+                "youtube_transcript_tracks_unavailable | source_id=%s | source_type=%s | preferred_language=%s",
+                source.source_id,
+                source.source_type,
+                preferred_language or "",
+            )
             raise TranscriptFetchError(f"Transcript fetch failed: no subtitles are available for {source.source_id}")
 
         last_error: Exception | None = None
-        for track in tracks[: self.language_preference.max_download_attempts]:
+        candidate_tracks = transcript_download_candidates(ranked_tracks, self.language_preference)
+        if not candidate_tracks:
+            LOGGER.info(
+                "youtube_transcript_tracks_no_acceptable_candidates | source_id=%s | source_type=%s | track_count=%s | preferred_language=%s",
+                source.source_id,
+                source.source_type,
+                len(ranked_tracks),
+                preferred_language or "",
+            )
+            raise TranscriptFetchError(f"Transcript fetch failed: no subtitles are available for {source.source_id}")
+
+        selected_tracks = candidate_tracks[: self.language_preference.max_download_attempts]
+        if len(candidate_tracks) > len(selected_tracks):
+            LOGGER.info(
+                "youtube_transcript_tracks_limited | source_id=%s | source_type=%s | track_count=%s | attempted_track_count=%s",
+                source.source_id,
+                source.source_type,
+                len(candidate_tracks),
+                len(selected_tracks),
+            )
+        for attempt, track in enumerate(selected_tracks, start=1):
+            LOGGER.info(
+                "youtube_transcript_download_attempt | source_id=%s | source_type=%s | attempt=%s | language=%s | track_kind=%s | track_id=%s",
+                source.source_id,
+                source.source_type,
+                attempt,
+                track.language,
+                track.track_kind,
+                track.id,
+            )
             try:
                 downloaded_path = self._download_track(source, track)
                 vtt_content = self._read_as_vtt(downloaded_path)
@@ -101,8 +149,25 @@ class YoutubeTranscriptFetcher:
                 )
             except Exception as exc:
                 last_error = exc
+                LOGGER.info(
+                    "youtube_transcript_download_attempt_failed | source_id=%s | source_type=%s | attempt=%s | language=%s | track_kind=%s | track_id=%s | error=%s",
+                    source.source_id,
+                    source.source_type,
+                    attempt,
+                    track.language,
+                    track.track_kind,
+                    track.id,
+                    exc,
+                )
                 continue
 
+        LOGGER.info(
+            "youtube_transcript_download_failed | source_id=%s | source_type=%s | attempted_track_count=%s | error=%s",
+            source.source_id,
+            source.source_type,
+            len(selected_tracks),
+            last_error,
+        )
         raise TranscriptFetchError(f"Transcript fetch failed: failed to download subtitles: {last_error}")
 
     def _download_track(self, source: SourceRef, track: TranscriptTrack) -> Path:

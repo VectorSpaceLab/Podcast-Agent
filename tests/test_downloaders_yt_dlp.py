@@ -15,6 +15,7 @@ def test_build_base_yt_dlp_options_contains_common_options() -> None:
 
     assert options["ignoreconfig"] is True
     assert options["js_runtimes"] == {"node": {}}
+    assert options["remote_components"] == ["ejs:github"]
     assert options["quiet"] is True
     assert options["no_warnings"] is True
 
@@ -51,9 +52,11 @@ def test_build_subtitle_download_options_selects_manual_track(tmp_path: Path) ->
 
     assert options["writesubtitles"] is True
     assert options["writeautomaticsub"] is False
+    assert options["ignore_no_formats_error"] is True
     assert options["subtitleslangs"] == ["en"]
     assert options["subtitlesformat"] == "srt/vtt/best"
     assert options["convertsubtitles"] == "srt"
+    assert options["sleep_interval_subtitles"] == 30
 
 
 def test_build_audio_download_options_contains_audio_postprocessor(tmp_path: Path) -> None:

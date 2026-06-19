@@ -1,6 +1,7 @@
 from podcast_agent.elements.transcript_tracks import (
     TranscriptLanguagePreference,
     rank_transcript_tracks,
+    transcript_download_candidates,
     transcript_tracks_from_info,
     transcript_tracks_from_info_for_source,
 )
@@ -82,3 +83,33 @@ def test_rank_transcript_tracks_treats_bilibili_ai_language_as_natural_language(
     )
 
     assert [track.id for track in ranked] == ["ai-zh", "ai-ar", "ai-en", "ai-ja"]
+
+
+def test_transcript_download_candidates_keep_manual_and_matching_automatic() -> None:
+    tracks = [
+        TranscriptTrack(id="zh", language="zh", track_kind="automatic"),
+        TranscriptTrack(id="ai-zh", language="ai-zh", track_kind="automatic"),
+        TranscriptTrack(id="en", language="en", track_kind="automatic"),
+        TranscriptTrack(id="ja", language="ja", track_kind="manual"),
+    ]
+
+    candidates = transcript_download_candidates(
+        tracks,
+        TranscriptLanguagePreference(preferred_languages=("zh-Hans",)),
+    )
+
+    assert [track.id for track in candidates] == ["zh", "ai-zh", "ja"]
+
+
+def test_transcript_download_candidates_keep_all_without_preferred_language() -> None:
+    tracks = [
+        TranscriptTrack(id="en", language="en", track_kind="automatic"),
+        TranscriptTrack(id="ja", language="ja", track_kind="manual"),
+    ]
+
+    candidates = transcript_download_candidates(
+        tracks,
+        TranscriptLanguagePreference(preferred_languages=()),
+    )
+
+    assert candidates == tracks

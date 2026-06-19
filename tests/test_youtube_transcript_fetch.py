@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from podcast_agent.elements.transcript_tracks import TranscriptLanguagePreference
 from podcast_agent.elements.youtube_transcript import YoutubeTranscriptFetcher
 from podcast_agent.pipeline.artifacts import load_json
 from podcast_agent.types import SourceRef
@@ -54,6 +55,31 @@ def test_youtube_transcript_fetcher_falls_back_to_audio_transcription(tmp_path: 
     assert (tmp_path / "audio_info.json").is_file()
     assert (tmp_path / "transcript.txt").read_text(encoding="utf-8") == "转录第一句。\n转录第二句。\n"
     assert transcriber.calls
+
+
+def test_youtube_transcript_fetcher_skips_non_preferred_automatic_caption(tmp_path: Path) -> None:
+    downloader = FakeTranscriptDownloader(
+        info={
+            "subtitles": {"ja": [{"ext": "vtt"}]},
+            "automatic_captions": {
+                "zh": [{"ext": "vtt"}],
+                "en": [{"ext": "vtt"}],
+            },
+        },
+        fail_downloads=1,
+    )
+
+    info = YoutubeTranscriptFetcher(
+        elements_dir=tmp_path,
+        downloader=downloader,
+        language_preference=TranscriptLanguagePreference(preferred_languages=("zh-Hans",)),
+    ).fetch(SOURCE)
+
+    assert info.language == "ja"
+    assert downloader.subtitle_calls == [
+        (SOURCE.url, tmp_path / "raw", "zh", "automatic"),
+        (SOURCE.url, tmp_path / "raw", "ja", "manual"),
+    ]
 
 
 def test_bilibili_transcript_fetcher_filters_danmaku_and_uses_ai_caption(tmp_path: Path) -> None:

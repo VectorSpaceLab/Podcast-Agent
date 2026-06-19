@@ -19,6 +19,7 @@ def build_base_yt_dlp_options(*, cookies_file: str | None = None) -> dict[str, A
     options: dict[str, Any] = {
         "ignoreconfig": True,
         "js_runtimes": {"node": {}},
+        "remote_components": ["ejs:github"],
         "quiet": True,
         "no_warnings": True,
     }
@@ -145,12 +146,14 @@ def build_subtitle_download_yt_dlp_options(
         **build_base_yt_dlp_options(cookies_file=cookies_file),
         "skip_download": True,
         "format": None,
+        "ignore_no_formats_error": True,
         "writesubtitles": track_kind == "manual",
         "writeautomaticsub": track_kind == "automatic",
         "subtitleslangs": [language],
         "subtitlesformat": "srt/vtt/best",
         "convertsubtitles": "srt",
         "writeinfojson": True,
+        "sleep_interval_subtitles": 30,
         "paths": {"home": str(output_dir)},
         "outtmpl": "%(id)s.%(ext)s",
     }
