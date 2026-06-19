@@ -228,7 +228,7 @@ scripts/run-full-batch.sh
 指定 cases 文件、输出目录或并发数：
 
 ```bash
-CASES_PATH=examples/full-report-cases.json \
+CASES_PATH=examples/full-report-cases.jsonl \
 OUTPUT_ROOT=output \
 MAX_JOBS=3 \
 scripts/run-full-batch.sh

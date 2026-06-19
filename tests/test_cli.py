@@ -294,16 +294,11 @@ def test_cli_intent_writes_intent_json(tmp_path) -> None:
 
 
 def test_cli_full_batch_dry_run_filters_cases(tmp_path) -> None:
-    cases_path = tmp_path / "cases.json"
+    cases_path = tmp_path / "cases.jsonl"
     cases_path.write_text(
-        """{
-  "version": 1,
-  "default_question": "默认问题？",
-  "cases": [
-    {"id": "old", "url": "https://www.youtube.com/watch?v=old", "tags": ["legacy"]},
-    {"id": "new", "url": "https://www.youtube.com/watch?v=new", "question": "新问题？", "tags": ["new", "pdf"]}
-  ]
-}
+        """{"id": "old", "url": "https://www.youtube.com/watch?v=old", "question": "旧问题？", "enabled": true, "tags": ["legacy"]}
+{"id": "skip", "url": "https://www.youtube.com/watch?v=skip", "question": "跳过？", "enabled": false, "tags": ["new"]}
+{"id": "new", "url": "https://www.youtube.com/watch?v=new", "question": "新问题？", "enabled": true, "tags": ["new", "pdf"], "notes": "extra fields are ignored"}
 """,
         encoding="utf-8",
     )
@@ -328,22 +323,37 @@ def test_cli_full_batch_dry_run_filters_cases(tmp_path) -> None:
     assert "Dry run: 1 cases selected." in result.output
     assert "new\thttps://www.youtube.com/watch?v=new" in result.output
     assert "old\thttps://www.youtube.com/watch?v=old" not in result.output
+    assert "skip\thttps://www.youtube.com/watch?v=skip" not in result.output
     assert not (tmp_path / "out" / "batch-rid" / "logs" / "summary.json").exists()
 
 
-def test_cli_full_batch_runs_selected_cases_and_writes_summary(tmp_path) -> None:
-    from podcast_agent.cli import batch as main
-
+def test_cli_full_batch_keeps_legacy_json_cases_support(tmp_path) -> None:
     cases_path = tmp_path / "cases.json"
     cases_path.write_text(
         """{
   "version": 1,
   "default_question": "默认问题？",
   "cases": [
-    {"id": "a", "url": "https://www.youtube.com/watch?v=a", "tags": ["new"]},
-    {"id": "b", "url": "https://www.youtube.com/watch?v=b", "tags": ["legacy"]}
+    {"id": "legacy", "url": "https://www.youtube.com/watch?v=legacy", "tags": ["old"]}
   ]
 }
+""",
+        encoding="utf-8",
+    )
+
+    result = CliRunner().invoke(app, ["full-batch", "--cases", str(cases_path), "--dry-run"])
+
+    assert result.exit_code == 0
+    assert "legacy\thttps://www.youtube.com/watch?v=legacy" in result.output
+
+
+def test_cli_full_batch_runs_selected_cases_and_writes_summary(tmp_path) -> None:
+    from podcast_agent.cli import batch as main
+
+    cases_path = tmp_path / "cases.jsonl"
+    cases_path.write_text(
+        """{"id": "a", "url": "https://www.youtube.com/watch?v=a", "question": "问题 A？", "tags": ["new"]}
+{"id": "b", "url": "https://www.youtube.com/watch?v=b", "question": "问题 B？", "tags": ["legacy"]}
 """,
         encoding="utf-8",
     )
@@ -381,7 +391,7 @@ def test_cli_full_batch_runs_selected_cases_and_writes_summary(tmp_path) -> None
     summary_path = tmp_path / "out" / "batch-rid" / "logs" / "summary.json"
     assert result.exit_code == 0
     assert calls[0][0] == "a"
-    assert calls[0][1] == "默认问题？"
+    assert calls[0][1] == "问题 A？"
     assert "OK   a" in result.output
     assert summary_path.is_file()
     assert '"success_count": 1' in summary_path.read_text(encoding="utf-8")
@@ -390,15 +400,9 @@ def test_cli_full_batch_runs_selected_cases_and_writes_summary(tmp_path) -> None
 def test_cli_full_batch_exits_nonzero_for_failed_case(tmp_path) -> None:
     from podcast_agent.cli import batch as main
 
-    cases_path = tmp_path / "cases.json"
+    cases_path = tmp_path / "cases.jsonl"
     cases_path.write_text(
-        """{
-  "version": 1,
-  "default_question": "默认问题？",
-  "cases": [
-    {"id": "a", "url": "https://www.youtube.com/watch?v=a"}
-  ]
-}
+        """{"id": "a", "url": "https://www.youtube.com/watch?v=a", "question": "默认问题？"}
 """,
         encoding="utf-8",
     )
@@ -433,16 +437,10 @@ def test_cli_full_batch_exits_nonzero_for_failed_case(tmp_path) -> None:
 
 
 def test_cli_full_batch_rejects_duplicate_case_ids(tmp_path) -> None:
-    cases_path = tmp_path / "cases.json"
+    cases_path = tmp_path / "cases.jsonl"
     cases_path.write_text(
-        """{
-  "version": 1,
-  "default_question": "默认问题？",
-  "cases": [
-    {"id": "a", "url": "https://www.youtube.com/watch?v=a"},
-    {"id": "a", "url": "https://www.youtube.com/watch?v=b"}
-  ]
-}
+        """{"id": "a", "url": "https://www.youtube.com/watch?v=a", "question": "问题？"}
+{"id": "a", "url": "https://www.youtube.com/watch?v=b", "question": "问题？"}
 """,
         encoding="utf-8",
     )

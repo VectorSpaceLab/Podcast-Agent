@@ -38,9 +38,9 @@ class FullBatchCaseResult:
 @app.command("full-batch")
 def full_batch(
     cases_path: Path = typer.Option(
-        Path("examples/full-report-cases.json"),
+        Path("examples/full-report-cases.jsonl"),
         "--cases",
-        help="JSON file containing full pipeline cases.",
+        help="JSONL or JSON file containing full pipeline cases.",
     ),
     case_ids: list[str] | None = typer.Option(
         None,
@@ -57,7 +57,7 @@ def full_batch(
     max_jobs: int = typer.Option(3, help="Maximum number of concurrent full runs."),
     dry_run: bool = typer.Option(False, help="Print selected cases without running them."),
 ) -> None:
-    """Run full pipeline cases from a JSON file."""
+    """Run full pipeline cases from a JSONL or JSON file."""
     try:
         selected_cases = select_full_batch_cases(
             load_full_batch_cases(cases_path),
@@ -113,6 +113,12 @@ def full_batch(
 def load_full_batch_cases(path: Path) -> list[FullBatchCase]:
     if not path.is_file():
         raise PodcastAgentError(f"Full batch failed: cases file not found: {path}")
+    if path.suffix.lower() == ".jsonl":
+        return load_full_batch_cases_jsonl(path)
+    return load_full_batch_cases_json(path)
+
+
+def load_full_batch_cases_json(path: Path) -> list[FullBatchCase]:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
@@ -124,25 +130,60 @@ def load_full_batch_cases(path: Path) -> list[FullBatchCase]:
     if not isinstance(raw_cases, list) or not raw_cases:
         raise PodcastAgentError("Full batch failed: cases must be a non-empty array.")
 
+    return build_full_batch_cases(raw_cases, default_question=default_question, source_label="cases")
+
+
+def load_full_batch_cases_jsonl(path: Path) -> list[FullBatchCase]:
+    raw_cases: list[dict[str, Any]] = []
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except UnicodeDecodeError as exc:
+        raise PodcastAgentError("Full batch failed: cases file must be UTF-8 encoded.") from exc
+
+    for line_number, line in enumerate(lines, start=1):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        try:
+            raw_case = json.loads(stripped)
+        except json.JSONDecodeError as exc:
+            raise PodcastAgentError(f"Full batch failed: cases line {line_number} must be valid JSON.") from exc
+        if not isinstance(raw_case, dict):
+            raise PodcastAgentError(f"Full batch failed: cases line {line_number} must be a JSON object.")
+        if raw_case.get("enabled", True) is False:
+            continue
+        raw_cases.append(raw_case)
+
+    if not raw_cases:
+        raise PodcastAgentError("Full batch failed: cases must contain at least one enabled case.")
+    return build_full_batch_cases(raw_cases, default_question="", source_label="cases line")
+
+
+def build_full_batch_cases(
+    raw_cases: list[dict[str, Any]],
+    *,
+    default_question: str,
+    source_label: str,
+) -> list[FullBatchCase]:
     cases: list[FullBatchCase] = []
     seen_ids: set[str] = set()
     for index, raw_case in enumerate(raw_cases, start=1):
         if not isinstance(raw_case, dict):
-            raise PodcastAgentError(f"Full batch failed: cases[{index}] must be a JSON object.")
+            raise PodcastAgentError(f"Full batch failed: {source_label}[{index}] must be a JSON object.")
         case_id = str(raw_case.get("id") or "").strip()
         url = str(raw_case.get("url") or "").strip()
         question = str(raw_case.get("question") or default_question).strip()
         tags = raw_case.get("tags", [])
         if not case_id:
-            raise PodcastAgentError(f"Full batch failed: cases[{index}].id is required.")
+            raise PodcastAgentError(f"Full batch failed: {source_label}[{index}].id is required.")
         if case_id in seen_ids:
             raise PodcastAgentError("Full batch failed: cases[].id must be unique.")
         if not url:
-            raise PodcastAgentError(f"Full batch failed: cases[{index}].url is required.")
+            raise PodcastAgentError(f"Full batch failed: {source_label}[{index}].url is required.")
         if not question:
-            raise PodcastAgentError(f"Full batch failed: cases[{index}].question is required.")
+            raise PodcastAgentError(f"Full batch failed: {source_label}[{index}].question is required.")
         if not isinstance(tags, list) or not all(isinstance(tag, str) for tag in tags):
-            raise PodcastAgentError(f"Full batch failed: cases[{index}].tags must be an array of strings.")
+            raise PodcastAgentError(f"Full batch failed: {source_label}[{index}].tags must be an array of strings.")
         seen_ids.add(case_id)
         cases.append(
             FullBatchCase(

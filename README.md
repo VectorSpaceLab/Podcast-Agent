@@ -229,7 +229,7 @@ scripts/run-full-batch.sh
 To use a custom cases file, output directory, or concurrency level:
 
 ```bash
-CASES_PATH=examples/full-report-cases.json \
+CASES_PATH=examples/full-report-cases.jsonl \
 OUTPUT_ROOT=output \
 MAX_JOBS=3 \
 scripts/run-full-batch.sh

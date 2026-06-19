@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CASES_PATH="${CASES_PATH:-"$ROOT_DIR/examples/full-report-cases.json"}"
+CASES_PATH="${CASES_PATH:-"$ROOT_DIR/examples/full-report-cases.jsonl"}"
 OUTPUT_ROOT="${OUTPUT_ROOT:-"$ROOT_DIR/output"}"
 MAX_JOBS="${MAX_JOBS:-3}"
 

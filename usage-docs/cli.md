@@ -285,11 +285,11 @@ output/audio-demo/elements/transcript.txt
 
 ## 批量并发执行
 
-从 JSON case 文件并发跑完整流程：
+从 JSONL manifest 文件并发跑完整流程：
 
 ```bash
 .venv/bin/podcast-agent full-batch \
-  --cases examples/full-report-cases.json \
+  --cases examples/full-report-cases.jsonl \
   --max-jobs 3
 ```
 
@@ -297,7 +297,7 @@ output/audio-demo/elements/transcript.txt
 
 ```bash
 .venv/bin/podcast-agent full-batch \
-  --cases examples/full-report-cases.json \
+  --cases examples/full-report-cases.jsonl \
   --tag new \
   --dry-run
 ```
@@ -306,7 +306,7 @@ output/audio-demo/elements/transcript.txt
 
 ```bash
 .venv/bin/podcast-agent full-batch \
-  --cases examples/full-report-cases.json \
+  --cases examples/full-report-cases.jsonl \
   --case V9eI-t3TApE \
   --max-jobs 1
 ```
@@ -334,27 +334,16 @@ MAX_JOBS=5 ./scripts/run-full-batch.sh
 `full-batch` 默认读取：
 
 ```text
-examples/full-report-cases.json
+examples/full-report-cases.jsonl
 ```
 
-格式：
+格式为 JSON Lines，每行一个 case：
 
-```json
-{
-  "version": 1,
-  "default_question": "这个视频讲了什么？",
-  "cases": [
-    {
-      "id": "V9eI-t3TApE",
-      "url": "https://www.youtube.com/watch?v=V9eI-t3TApE",
-      "question": "这个视频讲了什么？",
-      "tags": ["new", "full", "xhs", "pdf"]
-    }
-  ]
-}
+```jsonl
+{"id": "V9eI-t3TApE", "url": "https://www.youtube.com/watch?v=V9eI-t3TApE", "question": "这个视频讲了什么？", "enabled": true, "tags": ["new", "full", "xhs", "pdf"]}
 ```
 
-`question` 可省略；省略时使用 `default_question`。
+`enabled: false` 的 case 会被跳过。`duration`、`notes`、`seed_artifacts_from` 等额外字段会被忽略，方便和外部 manifest 保持同一格式。
 
 ## 常见工作流
 
