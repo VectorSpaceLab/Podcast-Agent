@@ -2,9 +2,11 @@ from pathlib import Path
 
 from podcast_agent.insights.viewpoint import (
     build_viewpoints_payload,
+    generate_viewpoint_detail,
     generate_viewpoints,
     select_viewpoints_for_detail,
 )
+from podcast_agent.errors import EvidenceExtractionError
 from podcast_agent.insights.viewpoint_prompts import build_viewpoint_detail_v1_prompt, select_segments_for_viewpoint
 from podcast_agent.pipeline.artifacts import load_json, save_json
 
@@ -161,6 +163,130 @@ def test_generate_viewpoints_writes_details_and_payload(tmp_path: Path) -> None:
     assert (tmp_path / "insights" / "viewpoint_V1.json").is_file()
     assert (tmp_path / "insights" / "viewpoint_V2.json").is_file()
     assert payload["viewpoint_details"][0]["viewpoint_title"] == "第一观点"
+
+
+def test_generate_viewpoint_detail_retries_empty_response() -> None:
+    outline = {
+        "viewpoint_breakdown": [
+            {"id": "V1", "title": "观点", "summary": "摘要", "evidence_segment_indexes": [1]}
+        ]
+    }
+    evidence = {
+        "segments": [
+            {
+                "index": 1,
+                "start": "00:00:00.000",
+                "end": "00:00:01.000",
+                "subtitles": [{"start": "00:00:00.000", "end": "00:00:01.000", "text": "hello"}],
+            }
+        ]
+    }
+    calls = []
+
+    def fake_model_writer(prompt: str) -> str:
+        calls.append(prompt)
+        if len(calls) == 1:
+            return ""
+        assert "The previous response was invalid." in prompt
+        assert "Reason: empty_response." in prompt
+        return '{"sub_theses": []}'
+
+    detail = generate_viewpoint_detail(
+        question="q",
+        outline=outline,
+        evidence=evidence,
+        viewpoint_id="V1",
+        source_url=None,
+        video_title="",
+        video_description="",
+        model_writer=fake_model_writer,
+    )
+
+    assert len(calls) == 2
+    assert detail["viewpoint_id"] == "V1"
+    assert detail["sub_theses"] == []
+
+
+def test_generate_viewpoint_detail_retries_invalid_json() -> None:
+    outline = {
+        "viewpoint_breakdown": [
+            {"id": "V1", "title": "观点", "summary": "摘要", "evidence_segment_indexes": [1]}
+        ]
+    }
+    evidence = {
+        "segments": [
+            {
+                "index": 1,
+                "start": "00:00:00.000",
+                "end": "00:00:01.000",
+                "subtitles": [{"start": "00:00:00.000", "end": "00:00:01.000", "text": "hello"}],
+            }
+        ]
+    }
+    calls = []
+
+    def fake_model_writer(prompt: str) -> str:
+        calls.append(prompt)
+        if len(calls) == 1:
+            return "not json"
+        assert "Reason: invalid_json." in prompt
+        return '{"sub_theses": []}'
+
+    detail = generate_viewpoint_detail(
+        question="q",
+        outline=outline,
+        evidence=evidence,
+        viewpoint_id="V1",
+        source_url=None,
+        video_title="",
+        video_description="",
+        model_writer=fake_model_writer,
+    )
+
+    assert len(calls) == 2
+    assert detail["viewpoint_id"] == "V1"
+
+
+def test_generate_viewpoint_detail_raises_after_retry_exhaustion() -> None:
+    outline = {
+        "viewpoint_breakdown": [
+            {"id": "V1", "title": "观点", "summary": "摘要", "evidence_segment_indexes": [1]}
+        ]
+    }
+    evidence = {
+        "segments": [
+            {
+                "index": 1,
+                "start": "00:00:00.000",
+                "end": "00:00:01.000",
+                "subtitles": [{"start": "00:00:00.000", "end": "00:00:01.000", "text": "hello"}],
+            }
+        ]
+    }
+    calls = []
+
+    def fake_model_writer(prompt: str) -> str:
+        calls.append(prompt)
+        return ""
+
+    try:
+        generate_viewpoint_detail(
+            question="q",
+            outline=outline,
+            evidence=evidence,
+            viewpoint_id="V1",
+            source_url=None,
+            video_title="",
+            video_description="",
+            model_writer=fake_model_writer,
+        )
+    except EvidenceExtractionError as exc:
+        assert "after 3 attempts" in str(exc)
+        assert "empty_response" in str(exc)
+    else:
+        raise AssertionError("expected EvidenceExtractionError")
+
+    assert len(calls) == 3
 
 
 def test_build_viewpoints_payload_records_omitted_ids() -> None:

@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import json
 from pathlib import Path
+import re
 from typing import Any
 
 from podcast_agent.errors import EvidenceExtractionError
@@ -22,6 +24,8 @@ from podcast_agent.pipeline.artifacts import load_json, save_json
 
 REPORT_VIEWPOINT_DETAIL_LIMIT = 8
 VIEWPOINT_DETAIL_MAX_WORKERS = 8
+VIEWPOINT_DETAIL_MAX_ATTEMPTS = 3
+VIEWPOINT_DETAIL_RESPONSE_PREVIEW_LIMIT = 200
 REPORT_VIEWPOINT_SELECTION_SORT = "importance_score_desc_filter_then_outline_order"
 
 
@@ -155,13 +159,68 @@ def generate_viewpoint_detail(
         source_url=source_url,
         report_intent=report_intent,
     )
-    response = model_writer(prompt).strip()
-    if not response:
-        raise EvidenceExtractionError(f"Viewpoint generation failed: model returned empty content for {viewpoint_id}.")
-    detail = parse_model_json(response)
-    if not isinstance(detail.get("sub_theses"), list):
-        raise EvidenceExtractionError(f"Viewpoint generation failed: model output missing sub_theses list for {viewpoint_id}.")
-    return merge_viewpoint_detail_metadata(outline=outline, viewpoint_id=viewpoint_id, detail_payload=detail)
+    last_reason = "invalid_json"
+    last_preview = ""
+    for attempt in range(1, VIEWPOINT_DETAIL_MAX_ATTEMPTS + 1):
+        active_prompt = prompt if attempt == 1 else _build_viewpoint_retry_prompt(prompt, reason=last_reason)
+        response = model_writer(active_prompt).strip()
+        reason = _classify_viewpoint_detail_failure(response)
+        if reason is None:
+            detail = parse_model_json(response)
+            if isinstance(detail.get("sub_theses"), list):
+                return merge_viewpoint_detail_metadata(outline=outline, viewpoint_id=viewpoint_id, detail_payload=detail)
+            reason = "missing_sub_theses"
+
+        last_reason = reason or "invalid_json"
+        last_preview = _truncate_response_preview(response)
+
+    suffix = f" Last response preview: {last_preview}" if last_preview else ""
+    raise EvidenceExtractionError(
+        f"Viewpoint generation failed: model output remained invalid for {viewpoint_id} "
+        f"after {VIEWPOINT_DETAIL_MAX_ATTEMPTS} attempts ({last_reason}).{suffix}"
+    )
+
+
+def _classify_viewpoint_detail_failure(content: str) -> str | None:
+    text = str(content).strip()
+    if not text:
+        return "empty_response"
+
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        match = re.search(r"\{.*\}", text, re.S)
+        if not match:
+            return "invalid_json"
+        try:
+            payload = json.loads(match.group(0))
+        except json.JSONDecodeError:
+            return "invalid_json"
+
+    if not isinstance(payload, dict):
+        return "non_object_json"
+    return None
+
+
+def _build_viewpoint_retry_prompt(prompt: str, *, reason: str) -> str:
+    corrective_suffix = "\n".join(
+        [
+            "",
+            "The previous response was invalid.",
+            f"Reason: {reason}.",
+            "Your next response must be exactly one JSON object.",
+            "Start with { and end with }.",
+            "Do not include Markdown fences or any extra text.",
+        ]
+    )
+    return prompt + corrective_suffix
+
+
+def _truncate_response_preview(content: str) -> str:
+    preview = str(content).strip()
+    if len(preview) <= VIEWPOINT_DETAIL_RESPONSE_PREVIEW_LIMIT:
+        return preview
+    return preview[: VIEWPOINT_DETAIL_RESPONSE_PREVIEW_LIMIT - 3] + "..."
 
 
 def merge_viewpoint_detail_metadata(
