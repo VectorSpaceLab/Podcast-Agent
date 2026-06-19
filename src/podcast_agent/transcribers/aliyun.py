@@ -5,14 +5,15 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from http import HTTPStatus
-import json
+import logging
 from pathlib import Path
 import time
 from typing import Any, Protocol
-from urllib.error import URLError
 from urllib.parse import urlparse
-from urllib.request import Request, urlopen
 from uuid import uuid4
+
+import requests
+from requests.adapters import HTTPAdapter
 
 from podcast_agent.errors import AudioTranscriptionError
 from podcast_agent.transcribers.audio_prepare import (
@@ -21,6 +22,9 @@ from podcast_agent.transcribers.audio_prepare import (
 )
 from podcast_agent.transcribers.types import TranscriptionRequest, TranscriptionResult
 from podcast_agent.types import TranscriptSegment
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -103,11 +107,24 @@ class AliyunOssStore:
 
 
 class AliyunAsrClient:
-    result_download_attempts = 5
-    result_download_timeout_sec = 300
+    connection_pool_size = 16
+    result_download_attempts = 8
+    result_download_timeout = (10, 300)
+    transcription_wait_attempts = 5
 
-    def __init__(self, config: AliyunTranscriberConfig) -> None:
+    def __init__(self, config: AliyunTranscriberConfig, *, session: requests.Session | None = None) -> None:
         self.config = config
+        self.session = session or self._build_session()
+
+    def _build_session(self) -> requests.Session:
+        session = requests.Session()
+        adapter = HTTPAdapter(
+            pool_connections=self.connection_pool_size,
+            pool_maxsize=self.connection_pool_size,
+        )
+        session.mount("http://", adapter)
+        session.mount("https://", adapter)
+        return session
 
     def transcribe_from_url(
         self,
@@ -127,6 +144,7 @@ class AliyunAsrClient:
             model=self.config.model,
             file_urls=[file_url],
             language_hints=list(language_hints),
+            session=self.session,
         )
         if task_response.status_code != HTTPStatus.OK:
             raise AudioTranscriptionError(f"Failed to submit Aliyun transcription task: {task_response.message}")
@@ -137,7 +155,7 @@ class AliyunAsrClient:
             if time.time() - started > self.config.poll_timeout_sec:
                 raise AudioTranscriptionError(f"Aliyun transcription timed out after {self.config.poll_timeout_sec}s")
 
-            response = Transcription.wait(task=task_id)
+            response = self._wait_for_transcription(Transcription, task_id)
             if response.status_code != HTTPStatus.OK:
                 raise AudioTranscriptionError(f"Aliyun transcription failed: {response.message}")
 
@@ -157,24 +175,57 @@ class AliyunAsrClient:
 
             time.sleep(self.config.poll_interval_sec)
 
+    def _wait_for_transcription(self, transcription: Any, task_id: str):
+        last_error: requests.RequestException | None = None
+        for attempt in range(1, self.transcription_wait_attempts + 1):
+            try:
+                return transcription.wait(task=task_id, session=self.session)
+            except requests.RequestException as exc:
+                last_error = exc
+                if attempt < self.transcription_wait_attempts:
+                    delay = min(2 ** (attempt - 1), 8)
+                    logger.warning(
+                        "aliyun_transcription_wait_retrying host=%s attempt=%s/%s delay=%s error=%s",
+                        "dashscope.aliyuncs.com",
+                        attempt,
+                        self.transcription_wait_attempts,
+                        delay,
+                        exc.__class__.__name__,
+                    )
+                    time.sleep(delay)
+        raise AudioTranscriptionError(f"Aliyun transcription wait failed after retries: {last_error}") from last_error
+
     def _download_transcription_result(self, transcription_url: str) -> dict[str, Any]:
         host = urlparse(transcription_url).netloc or "<unknown>"
-        last_error: Exception | None = None
+        last_error: requests.RequestException | None = None
         for attempt in range(1, self.result_download_attempts + 1):
             try:
-                request = Request(
+                response = self.session.get(
                     transcription_url,
                     headers={
                         "Accept": "application/json",
                         "User-Agent": "Podcast-Agent/0.1",
                     },
+                    timeout=self.result_download_timeout,
+                    allow_redirects=True,
                 )
-                with urlopen(request, timeout=self.result_download_timeout_sec) as response:
-                    return json.loads(response.read().decode("utf-8"))
-            except (OSError, URLError, json.JSONDecodeError) as exc:
+                response.raise_for_status()
+                return response.json()
+            except requests.RequestException as exc:
                 last_error = exc
                 if attempt < self.result_download_attempts:
-                    time.sleep(min(2 ** (attempt - 1), 8))
+                    delay = min(2 ** (attempt - 1), 8)
+                    logger.warning(
+                        "aliyun_transcription_result_download_retrying host=%s attempt=%s/%s delay=%s error=%s",
+                        host,
+                        attempt,
+                        self.result_download_attempts,
+                        delay,
+                        exc.__class__.__name__,
+                    )
+                    time.sleep(delay)
+            except ValueError as exc:
+                raise AudioTranscriptionError("Failed to parse Aliyun transcription result JSON") from exc
         raise AudioTranscriptionError(f"Failed to download Aliyun transcription result from {host}: {last_error}") from last_error
 
 

@@ -1,6 +1,13 @@
+from http import HTTPStatus
 from pathlib import Path
+from types import SimpleNamespace
 
+import pytest
+import requests
+
+from podcast_agent.errors import AudioTranscriptionError
 from podcast_agent.transcribers.aliyun import (
+    AliyunAsrClient,
     AliyunTranscriber,
     AliyunTranscriberConfig,
     is_no_words_response,
@@ -49,6 +56,172 @@ def test_is_no_words_response() -> None:
     assert is_no_words_response({"code": "ASR_RESPONSE_HAVE_NO_WORDS"})
     assert is_no_words_response({"message": "ASR_RESPONSE_HAVE_NO_WORDS"})
     assert not is_no_words_response({"code": "OTHER"})
+
+
+class FakeHttpResponse:
+    def __init__(self, payload: dict | None = None, *, json_error: ValueError | None = None) -> None:
+        self.payload = payload or {}
+        self.json_error = json_error
+        self.raise_for_status_calls = 0
+
+    def raise_for_status(self) -> None:
+        self.raise_for_status_calls += 1
+
+    def json(self) -> dict:
+        if self.json_error is not None:
+            raise self.json_error
+        return self.payload
+
+
+class FakeSession:
+    def __init__(self, *responses) -> None:
+        self.responses = list(responses)
+        self.calls: list[dict] = []
+
+    def get(self, url, **kwargs):
+        self.calls.append({"url": url, **kwargs})
+        response = self.responses.pop(0)
+        if isinstance(response, Exception):
+            raise response
+        return response
+
+
+def test_aliyun_client_builds_session_with_connection_pool() -> None:
+    client = AliyunAsrClient(_config())
+    https_adapter = client.session.get_adapter("https://example.com")
+
+    assert client.connection_pool_size == 16
+    assert https_adapter._pool_connections == client.connection_pool_size
+    assert https_adapter._pool_maxsize == client.connection_pool_size
+
+
+def test_aliyun_result_download_retries_temporary_errors(monkeypatch) -> None:
+    session = FakeSession(
+        requests.exceptions.SSLError("temporary TLS EOF"),
+        FakeHttpResponse({"transcripts": []}),
+    )
+    client = AliyunAsrClient(_config(), session=session)
+    sleeps: list[float] = []
+
+    monkeypatch.setattr("podcast_agent.transcribers.aliyun.time.sleep", sleeps.append)
+
+    assert client._download_transcription_result("https://dashscope-result-bj.example.com/result.json") == {
+        "transcripts": []
+    }
+    assert len(session.calls) == 2
+    assert session.calls[0]["timeout"] == client.result_download_timeout
+    assert session.calls[0]["allow_redirects"] is True
+    assert client.result_download_attempts == 8
+    assert sleeps == [1]
+
+
+def test_aliyun_result_download_raises_after_retry_exhaustion(monkeypatch) -> None:
+    session = FakeSession(*[requests.exceptions.ReadTimeout("read timed out") for _ in range(8)])
+    client = AliyunAsrClient(_config(), session=session)
+
+    monkeypatch.setattr("podcast_agent.transcribers.aliyun.time.sleep", lambda delay: None)
+
+    with pytest.raises(AudioTranscriptionError) as exc_info:
+        client._download_transcription_result("https://dashscope-result-bj.example.com/result.json?signature=secret")
+
+    assert len(session.calls) == client.result_download_attempts
+    message = str(exc_info.value)
+    assert "dashscope-result-bj.example.com" in message
+    assert "signature=secret" not in message
+
+
+def test_aliyun_result_download_passes_configured_timeout() -> None:
+    session = FakeSession(FakeHttpResponse({"transcripts": []}))
+    client = AliyunAsrClient(_config(), session=session)
+
+    assert client._download_transcription_result("https://dashscope-result-bj.example.com/result.json") == {
+        "transcripts": []
+    }
+    assert session.calls == [
+        {
+            "url": "https://dashscope-result-bj.example.com/result.json",
+            "headers": {
+                "Accept": "application/json",
+                "User-Agent": "Podcast-Agent/0.1",
+            },
+            "timeout": (10, 300),
+            "allow_redirects": True,
+        }
+    ]
+
+
+def test_aliyun_result_download_does_not_retry_malformed_json() -> None:
+    session = FakeSession(FakeHttpResponse(json_error=ValueError("invalid json")))
+    client = AliyunAsrClient(_config(), session=session)
+
+    with pytest.raises(AudioTranscriptionError, match="Failed to parse Aliyun transcription result JSON"):
+        client._download_transcription_result("https://dashscope-result-bj.example.com/result.json")
+
+    assert len(session.calls) == 1
+
+
+class FakeTranscriptionResponse:
+    def __init__(self, *, status_code=HTTPStatus.OK, output=None, message="") -> None:
+        self.status_code = status_code
+        self.output = output or {}
+        self.message = message
+
+
+def test_aliyun_client_reuses_session_for_sdk_calls(monkeypatch) -> None:
+    session = FakeSession(FakeHttpResponse({"transcripts": []}))
+    client = AliyunAsrClient(_config(), session=session)
+    calls: dict[str, object] = {}
+
+    from dashscope.audio.asr import Transcription
+
+    def fake_async_call(**kwargs):
+        calls["async_session"] = kwargs["session"]
+        return FakeTranscriptionResponse(output=SimpleNamespace(task_id="task-1"))
+
+    def fake_wait(**kwargs):
+        calls["wait_session"] = kwargs["session"]
+        return FakeTranscriptionResponse(
+            output={
+                "results": [
+                    {
+                        "subtask_status": "SUCCEEDED",
+                        "transcription_url": "https://dashscope-result-bj.example.com/result.json",
+                    }
+                ]
+            }
+        )
+
+    monkeypatch.setattr(Transcription, "async_call", fake_async_call)
+    monkeypatch.setattr(Transcription, "wait", fake_wait)
+
+    assert client.transcribe_from_url("https://example.com/audio.wav", language_hints=("zh",)) == []
+    assert calls["async_session"] is session
+    assert calls["wait_session"] is session
+
+
+def test_aliyun_client_retries_transcription_wait_transport_errors(monkeypatch) -> None:
+    session = FakeSession()
+    client = AliyunAsrClient(_config(), session=session)
+    sleeps: list[float] = []
+    calls = 0
+
+    class FakeTranscription:
+        @staticmethod
+        def wait(*, task, session):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                raise requests.exceptions.ConnectionError("connection reset")
+            return FakeTranscriptionResponse(output={"results": []})
+
+    monkeypatch.setattr("podcast_agent.transcribers.aliyun.time.sleep", sleeps.append)
+
+    response = client._wait_for_transcription(FakeTranscription, "task-1")
+
+    assert response.output == {"results": []}
+    assert calls == 2
+    assert sleeps == [1]
+    assert client.transcription_wait_attempts == 5
 
 
 class FakeArtifactStore:
