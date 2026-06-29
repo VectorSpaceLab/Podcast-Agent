@@ -31,10 +31,6 @@ def compose_xhs_report(
         output_dir / "elements" / "metadata.json",
         "elements/metadata.json",
     )
-    summary = _load_required_mapping(
-        output_dir / "insights" / "summary.json",
-        "insights/summary.json",
-    )
     viewpoints = _load_required_mapping(
         output_dir / "insights" / "viewpoints.json",
         "insights/viewpoints.json",
@@ -42,7 +38,6 @@ def compose_xhs_report(
 
     prompt = build_xhs_composition_prompt(
         metadata=metadata,
-        summary=summary,
         viewpoints=viewpoints,
         angle=angle,
     )

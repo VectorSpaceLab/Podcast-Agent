@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pytest
@@ -16,14 +17,6 @@ def _write_xhs_inputs(output_dir: Path) -> None:
             "webpage_url": "https://www.youtube.com/watch?v=xxxx",
             "duration_seconds": 5172,
             "description": "A long conversation about AI.",
-        },
-    )
-    save_json(
-        output_dir / "insights" / "summary.json",
-        {
-            "introduction": "这期播客讨论物理 AI。",
-            "core_conclusions": [{"title": "物理 AI 到了关键期", "rationale": "产业开始落地。"}],
-            "one_paragraph_takeaway": "关键不是模型更大，而是闭环更快。",
         },
     )
     save_json(
@@ -69,7 +62,13 @@ def _model_response() -> str:
 def test_compose_xhs_report_writes_note_and_post_meta(tmp_path: Path) -> None:
     _write_xhs_inputs(tmp_path)
 
-    result = compose_xhs_report(output_dir=tmp_path, model_writer=lambda _prompt: _model_response())
+    captured_prompt: dict[str, str] = {}
+
+    def fake_writer(prompt: str) -> str:
+        captured_prompt["value"] = prompt
+        return _model_response()
+
+    result = compose_xhs_report(output_dir=tmp_path, model_writer=fake_writer)
     note = result.note_path.read_text(encoding="utf-8")
     post_meta = load_json(result.post_meta_path)
 
@@ -89,10 +88,40 @@ def test_compose_xhs_report_writes_note_and_post_meta(tmp_path: Path) -> None:
     assert "## 结尾" not in note
     assert "这不是一个概念热词，而是一轮产业能力重排。" in note
 
+    input_payload = json.loads(captured_prompt["value"].split("输入材料：", 1)[1].strip())
+    assert set(input_payload) == {"metadata", "viewpoints", "viewpoint_count", "angle"}
+    assert "summary" not in input_payload
+    assert "viewpoint_breakdown" in input_payload["viewpoints"]
+    assert "viewpoint_details" in input_payload["viewpoints"]
+    assert input_payload["viewpoint_count"] == len(input_payload["viewpoints"]["viewpoint_breakdown"])
+
 
 def test_compose_xhs_report_fails_for_missing_required_artifacts(tmp_path: Path) -> None:
     with pytest.raises(XhsReportError, match="elements/metadata.json is required"):
         compose_xhs_report(output_dir=tmp_path, model_writer=lambda _prompt: "{}")
+
+
+def test_compose_xhs_report_does_not_require_summary_json(tmp_path: Path) -> None:
+    save_json(
+        tmp_path / "elements" / "metadata.json",
+        {
+            "title": "Example Podcast",
+            "author": "Example Host",
+            "webpage_url": "https://www.youtube.com/watch?v=xxxx",
+        },
+    )
+    save_json(
+        tmp_path / "insights" / "viewpoints.json",
+        {
+            "viewpoint_breakdown": [{"id": "V1", "title": "物理 AI", "summary": "从软件走向实体。"}],
+            "viewpoint_details": [],
+        },
+    )
+
+    result = compose_xhs_report(output_dir=tmp_path, model_writer=lambda _prompt: _model_response())
+
+    assert result.note_path.is_file()
+    assert result.post_meta_path.is_file()
 
 
 def test_render_xhs_note_markdown_escapes_frontmatter_quotes() -> None:
