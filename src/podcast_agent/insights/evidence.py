@@ -19,7 +19,7 @@ from podcast_agent.pipeline.artifacts import load_json, save_json
 class EvidenceConfig:
     chunk_duration_seconds: int = 600
     chunk_overlap_seconds: int = 30
-    max_final_segments: int = 8
+    max_final_segments: int = 0
     include_outline: bool = True
     chunk_max_workers: int = 4
 

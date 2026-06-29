@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from podcast_agent.insights.evidence import (
@@ -94,6 +95,28 @@ def test_extract_evidence_writes_videochat_compatible_artifact(tmp_path: Path) -
             ],
         }
     ]
+
+
+def test_extract_evidence_keeps_all_segments_by_default(tmp_path: Path) -> None:
+    save_json(tmp_path / "input.json", {"url": "https://www.youtube.com/watch?v=xxxx", "question": "总结这个视频"})
+    save_json(tmp_path / "elements" / "metadata.json", {"title": "Example", "chapters": [{"start": 0.0, "title": "All"}]})
+    (tmp_path / "elements").mkdir(parents=True, exist_ok=True)
+    lines = ["WEBVTT", ""]
+    expected_segments = []
+    for index in range(10):
+        start = f"00:00:{index:02d}.000"
+        end = f"00:00:{index + 1:02d}.000"
+        lines.extend([f"{start} --> {end}", f"第{index + 1}句。", ""])
+        expected_segments.append({"start": start, "end": end})
+    (tmp_path / "elements" / "transcript.vtt").write_text("\n".join(lines), encoding="utf-8")
+
+    evidence = extract_evidence(
+        output_dir=tmp_path,
+        model_writer=lambda prompt: '{"segments": ' + json.dumps(expected_segments, ensure_ascii=False) + "}",
+    )
+
+    assert len(evidence["segments"]) == 10
+    assert evidence["segments"][-1]["start"] == "00:00:09.000"
 
 
 def test_extract_evidence_writes_empty_artifact_when_no_segments(tmp_path: Path) -> None:
